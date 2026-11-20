@@ -100,7 +100,7 @@ export default function LoginPage() {
         </div>
 
         <p className="relative z-10 text-xs text-gray-500">
-          © {new Date().getFullYear()} Gym Pilot. All rights reserved.
+          © 2026 Gym Pilot. All rights reserved.
         </p>
       </section>
 

@@ -182,7 +182,7 @@ export default function DashboardPage() {
       } = await supabase.auth.getSession();
 
       if (!session) {
-        router.replace("/login");
+        router.replace("/");
         return;
       }
 

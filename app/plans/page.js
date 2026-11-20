@@ -298,7 +298,7 @@ export default function PlansPage() {
     } = await supabase.auth.getSession();
 
     if (!session) {
-      router.replace("/login");
+      router.replace("/");
       return;
     }
 
