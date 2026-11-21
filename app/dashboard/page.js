@@ -130,8 +130,8 @@ export default function DashboardPage() {
     : 0;
 
   return (
-    <div className="min-h-screen bg-[#F5F7F6]">
-      <DashboardHeader gymName={gym?.name} />
+    <div className="min-h-screen mt-16 md:mt-0 bg-[#F5F7F6]">
+      {/* <DashboardHeader gymName={gym?.name} /> */}
 
       <main className="p-4 sm:p-6 lg:p-10 max-w-[1500px] mx-auto space-y-7">
         <WelcomeBanner gymName={gym?.name} />
