@@ -1,16 +1,12 @@
-import { Geist, Geist_Mono } from "next/font/google";
+
+import { Poppins } from "next/font/google";
 import LayoutShell from "@/components/LayoutShell";
 import "./globals.css";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
+const poppins = Poppins({
+  variable: "--font-poppins",
   subsets: ["latin"],
-  display: "swap",
-});
-
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
-  subsets: ["latin"],
+  weight: ["400", "500", "600", "700"],
   display: "swap",
 });
 
@@ -26,7 +22,6 @@ export const metadata = {
     "Manage your gym smarter with Gym Pilot. Track members, memberships, payments, renewals and daily gym operations from one simple dashboard.",
 
   applicationName: "Gym Pilot",
-
   keywords: [
     "Gym Pilot",
     "gym management software",
@@ -68,11 +63,8 @@ export const metadata = {
 
 export default function RootLayout({ children }) {
   return (
-    <html
-      lang="en"
-      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
-    >
-      <body className="min-h-full">
+    <html lang="en" className={`${poppins.variable} h-full antialiased`}>
+      <body className={`${poppins.className} min-h-full`}>
         <LayoutShell>{children}</LayoutShell>
       </body>
     </html>
