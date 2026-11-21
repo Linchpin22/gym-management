@@ -428,7 +428,7 @@ export default function AnalyticsPage() {
   }
 
   return (
-    <main className="min-h-screen bg-[#F5F7F6] p-4 sm:p-6 lg:p-8">
+    <main className="min-h-screen mt-16 md:mt-0 bg-[#F5F7F6] p-4 sm:p-6 lg:p-8">
       <div className="max-w-7xl mx-auto space-y-6">
         <div className="flex justify-end">
           <button

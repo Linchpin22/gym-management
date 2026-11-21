@@ -1,3 +1,4 @@
+// app/login/page.js  (your design, now with Sign in / Create account)
 "use client";
 
 import { useState } from "react";
@@ -10,37 +11,125 @@ import {
   EyeOff,
   ArrowRight,
   AlertCircle,
+  CheckCircle2,
+  Building2,
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
+
+function friendlyError(message) {
+  if (/invalid login credentials/i.test(message)) {
+    return "Email or password is incorrect. Please check both and try again.";
+  }
+  if (/already registered/i.test(message)) {
+    return "An account with this email already exists. Please sign in instead.";
+  }
+  if (/email not confirmed/i.test(message)) {
+    return "Please confirm your email first. Check your inbox for the confirmation link.";
+  }
+  return message;
+}
+
+
 
 export default function LoginPage() {
   const router = useRouter();
 
+  const [mode, setMode] = useState("signin"); // "signin" | "signup"
+  const [gymName, setGymName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
   const [loading, setLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
 
-  async function handleLogin(e) {
+  const isSignup = mode === "signup";
+
+  function switchMode(next) {
+    setMode(next);
+    setError("");
+    setNotice("");
+  }
+
+  async function handleSubmit(e) {
     e.preventDefault();
     setLoading(true);
     setError("");
+    setNotice("");
 
-    const { error } = await supabase.auth.signInWithPassword({
-      email: email.trim(),
-      password,
-    });
-
-    setLoading(false);
-
-    if (error) {
-      setError(error.message);
+    if (!isSignup) {
+      const { error } = await supabase.auth.signInWithPassword({
+        email: email.trim(),
+        password,
+      });
+      setLoading(false);
+      if (error) {
+        setError(friendlyError(error.message));
+        return;
+      }
+      router.replace("/dashboard");
       return;
     }
 
-    router.replace("/dashboard");
+    // ---- Create account ----
+    if (password.length < 8) {
+      setLoading(false);
+      setError("Password must be at least 8 characters.");
+      return;
+    }
+
+    // The gym name travels with the signup. A database trigger turns it into
+    // the owner's gym row, so it works even when email confirmation is on.
+    const { data, error } = await supabase.auth.signUp({
+      email: email.trim(),
+      password,
+      options: { data: { gym_name: gymName.trim() } },
+    });
+    setLoading(false);
+
+    if (error) {
+      setError(friendlyError(error.message));
+      return;
+    }
+
+    // With email confirmation on, an existing email comes back with no identities
+    if (data.user && data.user.identities && data.user.identities.length === 0) {
+      setError("An account with this email already exists. Please sign in instead.");
+      return;
+    }
+
+    // Confirmation off: we already have a session, go straight in
+    if (data.session) {
+      router.replace("/dashboard");
+      return;
+    }
+
+    // Confirmation on: ask them to check email, then sign in
+    setPassword("");
+    setMode("signin");
+    setNotice("Account created. Check your email to confirm it, then sign in.");
   }
+
+  async function handleGoogleLogin() {
+  setLoading(true);
+  setError("");
+  setNotice("");
+
+  const { error } = await supabase.auth.signInWithOAuth({
+    provider: "google",
+    options: {
+      redirectTo: `${window.location.origin}/auth/callback?next=/setup-gym`,
+    },
+  });
+
+  if (error) {
+    setLoading(false);
+    setError(friendlyError(error.message));
+  }
+}
+
+  const inputBase =
+    "w-full rounded-xl border border-[#DCE4DE] bg-white py-3.5 pl-12 text-sm text-[#17211A] outline-none transition placeholder:text-gray-400 focus:border-[#8BC34A] focus:ring-4 focus:ring-[#8BC34A]/10";
 
   return (
     <main className="flex min-h-screen bg-[#F5F7F6]">
@@ -104,7 +193,7 @@ export default function LoginPage() {
         </p>
       </section>
 
-      {/* Right Login Panel */}
+      {/* Right Panel */}
       <section className="flex flex-1 items-center justify-center px-5 py-10 sm:px-10">
         <div className="w-full max-w-md">
           {/* Mobile Branding */}
@@ -123,21 +212,81 @@ export default function LoginPage() {
             </div>
           </div>
 
+          {/* Sign in / Create account switch */}
+          <div
+            role="tablist"
+            aria-label="Sign in or create account"
+            className="mb-8 grid grid-cols-2 gap-1 rounded-xl bg-[#E8EDE9] p-1"
+          >
+            {[
+              ["signin", "Sign In"],
+              ["signup", "Create Account"],
+            ].map(([key, label]) => (
+              <button
+                key={key}
+                type="button"
+                role="tab"
+                aria-selected={mode === key}
+                onClick={() => switchMode(key)}
+                className={`cursor-pointer rounded-lg py-2.5 text-sm font-semibold transition ${
+                  mode === key
+                    ? "bg-white text-[#17211A] shadow-sm"
+                    : "text-[#668D43] hover:text-[#17211A]"
+                }`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+
           <div className="mb-8">
             <p className="mb-3 text-sm font-semibold text-[#668D43]">
-              WELCOME BACK
+              {isSignup ? "GET STARTED" : "WELCOME BACK"}
             </p>
 
             <h2 className="text-3xl font-bold tracking-tight text-[#17211A] sm:text-4xl">
-              Owner Login
+              {isSignup ? "Create your account" : "Owner Login"}
             </h2>
 
             <p className="mt-3 text-sm leading-6 text-[#829087]">
-              Sign in to access your gym management dashboard.
+              {isSignup
+                ? "Set up your gym in a minute. No card needed."
+                : "Sign in to access your gym management dashboard."}
             </p>
           </div>
 
-          <form onSubmit={handleLogin} className="space-y-5">
+          <form onSubmit={handleSubmit} className="space-y-5">
+            {/* Gym name (sign up only) */}
+            {isSignup && (
+              <div>
+                <label
+                  htmlFor="gymName"
+                  className="mb-2 block text-sm font-semibold text-[#26352A]"
+                >
+                  Gym Name
+                </label>
+
+                <div className="relative">
+                  <Building2
+                    size={19}
+                    className="absolute left-4 top-1/2 -translate-y-1/2 text-[#829087]"
+                  />
+
+                  <input
+                    id="gymName"
+                    type="text"
+                    placeholder="e.g. Iron Fitness"
+                    value={gymName}
+                    onChange={(e) => setGymName(e.target.value)}
+                    autoComplete="organization"
+                    required
+                    maxLength={80}
+                    className={`${inputBase} pr-4`}
+                  />
+                </div>
+              </div>
+            )}
+
             {/* Email */}
             <div>
               <label
@@ -161,21 +310,19 @@ export default function LoginPage() {
                   onChange={(e) => setEmail(e.target.value)}
                   autoComplete="email"
                   required
-                  className="w-full rounded-xl border border-[#DCE4DE] bg-white py-3.5 pl-12 pr-4 text-sm text-[#17211A] outline-none transition placeholder:text-gray-400 focus:border-[#8BC34A] focus:ring-4 focus:ring-[#8BC34A]/10"
+                  className={`${inputBase} pr-4`}
                 />
               </div>
             </div>
 
             {/* Password */}
             <div>
-              <div className="mb-2 flex items-center justify-between">
-                <label
-                  htmlFor="password"
-                  className="block text-sm font-semibold text-[#26352A]"
-                >
-                  Password
-                </label>
-              </div>
+              <label
+                htmlFor="password"
+                className="mb-2 block text-sm font-semibold text-[#26352A]"
+              >
+                Password
+              </label>
 
               <div className="relative">
                 <LockKeyhole
@@ -186,28 +333,43 @@ export default function LoginPage() {
                 <input
                   id="password"
                   type={showPassword ? "text" : "password"}
-                  placeholder="Enter your password"
+                  placeholder={isSignup ? "At least 8 characters" : "Enter your password"}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  autoComplete="current-password"
+                  autoComplete={isSignup ? "new-password" : "current-password"}
                   required
-                  className="w-full rounded-xl border border-[#DCE4DE] bg-white py-3.5 pl-12 pr-12 text-sm text-[#17211A] outline-none transition placeholder:text-gray-400 focus:border-[#8BC34A] focus:ring-4 focus:ring-[#8BC34A]/10"
+                  minLength={isSignup ? 8 : undefined}
+                  className={`${inputBase} pr-12`}
                 />
 
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
                   aria-label={showPassword ? "Hide password" : "Show password"}
-                  className="absolute right-4 cursor-pointer top-1/2 -translate-y-1/2 text-[#829087] transition hover:text-[#17211A]"
+                  className="absolute right-4 top-1/2 -translate-y-1/2 cursor-pointer text-[#829087] transition hover:text-[#17211A]"
                 >
                   {showPassword ? <EyeOff size={19} /> : <Eye size={19} />}
                 </button>
               </div>
             </div>
 
+            {/* Notice */}
+            {notice && (
+              <div
+                role="status"
+                className="flex items-start gap-2 rounded-xl border border-[#8BC34A]/30 bg-[#8BC34A]/10 p-3 text-sm text-[#3F6B1E]"
+              >
+                <CheckCircle2 size={18} className="mt-0.5 shrink-0" />
+                <p>{notice}</p>
+              </div>
+            )}
+
             {/* Error */}
             {error && (
-              <div className="flex items-start gap-2 rounded-xl border border-red-100 bg-red-50 p-3 text-sm text-red-600">
+              <div
+                role="alert"
+                className="flex items-start gap-2 rounded-xl border border-red-100 bg-red-50 p-3 text-sm text-red-600"
+              >
                 <AlertCircle size={18} className="mt-0.5 shrink-0" />
                 <p>{error}</p>
               </div>
@@ -222,16 +384,39 @@ export default function LoginPage() {
               {loading ? (
                 <>
                   <span className="h-4 w-4 animate-spin rounded-full border-2 border-[#17211A]/30 border-t-[#17211A]" />
-                  Signing in...
+                  {isSignup ? "Creating account..." : "Signing in..."}
                 </>
               ) : (
                 <>
-                  Sign In
+                  {isSignup ? "Create Account" : "Sign In"}
                   <ArrowRight size={18} />
                 </>
               )}
             </button>
           </form>
+          {/* Google Login Divider */}
+<div className="relative my-6">
+  <div className="absolute inset-0 flex items-center">
+    <div className="w-full border-t border-[#E8EDE9]" />
+  </div>
+
+  <div className="relative flex justify-center">
+    <span className="bg-[#F5F7F6] px-3 text-xs text-[#829087]">
+      OR CONTINUE WITH
+    </span>
+  </div>
+</div>
+
+{/* Google Login */}
+<button
+  type="button"
+  onClick={handleGoogleLogin}
+  disabled={loading}
+  className="flex w-full cursor-pointer items-center justify-center gap-3 rounded-xl border border-[#DCE4DE] bg-white py-3.5 text-sm font-semibold text-[#17211A] transition hover:border-[#B8C7BA] hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-60"
+>
+  <span className="text-lg font-bold text-[#4285F4]">G</span>
+  Continue with Google
+</button>
 
           <div className="mt-8 border-t border-[#E8EDE9] pt-6 text-center">
             <p className="text-xs text-[#829087]">
