@@ -11,17 +11,30 @@ import {
   LogOut,
   Menu,
   X,
+  CalendarDays,
+  Clock,
+  ChartNoAxesCombined,
 } from "lucide-react";
 
 const navItems = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
   { href: "/members", label: "Members", icon: Users },
   { href: "/plans", label: "Membership Plans", icon: CreditCard },
+  { href: "/analytics", label: "Analytics", icon: ChartNoAxesCombined },
 ];
-
 export default function AppSidebar({ onLogout }) {
   const pathname = usePathname();
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [currentTime, setCurrentTime] = useState(null);
+
+  useEffect(() => {
+    const updateTime = () => setCurrentTime(new Date());
+
+    updateTime();
+    const interval = setInterval(updateTime, 1000);
+
+    return () => clearInterval(interval);
+  }, []);
 
   useEffect(() => {
     setMobileOpen(false);
@@ -33,7 +46,6 @@ export default function AppSidebar({ onLogout }) {
     }
 
     window.addEventListener("keydown", handleEscape);
-
     return () => window.removeEventListener("keydown", handleEscape);
   }, []);
 
@@ -44,6 +56,24 @@ export default function AppSidebar({ onLogout }) {
       document.body.style.overflow = "";
     };
   }, [mobileOpen]);
+
+  const formattedDate = currentTime
+    ? currentTime.toLocaleDateString("en-IN", {
+        weekday: "long",
+        day: "2-digit",
+        month: "long",
+        year: "numeric",
+      })
+    : "";
+
+  const formattedTime = currentTime
+    ? currentTime.toLocaleTimeString("en-IN", {
+        hour: "2-digit",
+        minute: "2-digit",
+        second: "2-digit",
+        hour12: true,
+      })
+    : "";
 
   const Logo = () => (
     <div className="flex items-center gap-3">
@@ -85,10 +115,25 @@ export default function AppSidebar({ onLogout }) {
     </nav>
   );
 
+  const DateTime = () => (
+    <div className="mb-4 rounded-xl border border-white/10 bg-white/[0.04] p-3">
+      <p className="mb-3 text-sm font-medium text-white">
+        {formattedDate || "Loading date..."}
+      </p>
+
+      <div className="flex items-center gap-2">
+        <Clock size={15} className="text-[#8BC34A]" />
+        <span className="font-mono text-lg font-semibold tabular-nums text-[#8BC34A]">
+          {formattedTime || "--:--:--"}
+        </span>
+      </div>
+    </div>
+  );
+
   const LogoutButton = () => (
     <button
       onClick={onLogout}
-      className="flex w-full items-center gap-3 rounded-xl px-3 py-3 text-sm text-gray-300 transition hover:bg-white/5 hover:text-white"
+      className="flex w-full cursor-pointer items-center gap-3 rounded-xl px-3 py-3 text-sm text-gray-300 transition hover:bg-white/5 hover:text-white"
     >
       <LogOut size={18} />
       Log out
@@ -106,8 +151,11 @@ export default function AppSidebar({ onLogout }) {
         <div className="min-h-0 flex-1 overflow-y-auto">
           <Navigation />
         </div>
-
         <div className="mt-4 shrink-0 border-t border-white/10 pt-5">
+          <DateTime />
+
+          <div className="mb-3 border-t border-white/10" />
+
           <LogoutButton />
         </div>
       </aside>
@@ -121,7 +169,7 @@ export default function AppSidebar({ onLogout }) {
           onClick={() => setMobileOpen(true)}
           aria-label="Open menu"
           aria-expanded={mobileOpen}
-          className="flex h-10 w-10 items-center justify-center rounded-xl hover:bg-white/10"
+          className="flex h-10 w-10 cursor-pointer items-center justify-center rounded-xl hover:bg-white/10"
         >
           <Menu size={24} />
         </button>
@@ -133,7 +181,7 @@ export default function AppSidebar({ onLogout }) {
           type="button"
           aria-label="Close navigation menu"
           onClick={() => setMobileOpen(false)}
-          className="fixed inset-0 z-50 bg-black/50 md:hidden"
+          className="fixed inset-0 z-50 cursor-pointer bg-black/50 md:hidden"
         />
       )}
 
@@ -145,6 +193,14 @@ export default function AppSidebar({ onLogout }) {
       >
         <div className="mb-10 flex items-center justify-between px-2">
           <Logo />
+          <button
+            type="button"
+            onClick={() => setMobileOpen(false)}
+            aria-label="Close menu"
+            className="rounded-lg p-2 text-gray-400 hover:bg-white/10 hover:text-white"
+          >
+            <X size={20} />
+          </button>
         </div>
 
         <div className="min-h-0 flex-1 overflow-y-auto">
@@ -152,6 +208,10 @@ export default function AppSidebar({ onLogout }) {
         </div>
 
         <div className="mt-4 shrink-0 border-t border-white/10 pt-5">
+          <DateTime />
+
+          <div className="mb-3 border-t border-white/10" />
+
           <LogoutButton />
         </div>
       </aside>
