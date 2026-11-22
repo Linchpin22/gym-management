@@ -501,7 +501,7 @@ export default function MembersPage() {
   }
 
   return (
-    <div className="min-h-screen bg-[#F5F7F6]">
+    <div className="min-h-screen mt-16 md:mt-0 bg-[#F5F7F6]">
       <MembersHeader
         gym={gym}
         onAddMember={() => {
