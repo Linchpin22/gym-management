@@ -1,4 +1,3 @@
-
 "use client";
 
 import Link from "next/link";
@@ -24,6 +23,9 @@ import {
   CheckCircle2,
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
+import { useSubscription } from "@/lib/subscription";
+import PlanBadge from "@/components/PlanBadge";
+import PlanCard from "@/components/PlanCard";
 
 const navItems = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
@@ -34,6 +36,9 @@ const navItems = [
 
 export default function AppSidebar({ onLogout }) {
   const pathname = usePathname();
+
+  // Plan info (loaded once, used by the sidebar badge and the profile modal)
+  const { gym: subGym, plans, refresh: refreshPlan } = useSubscription();
 
   const [mobileOpen, setMobileOpen] = useState(false);
   const [currentTime, setCurrentTime] = useState(null);
@@ -107,6 +112,7 @@ export default function AppSidebar({ onLogout }) {
   async function openProfile() {
     setProfileOpen(true);
     setProfileLoading(true);
+    refreshPlan();
     setEditing(false);
     setProfileError("");
     setProfileSuccess("");
@@ -185,6 +191,7 @@ export default function AppSidebar({ onLogout }) {
 
     setGym(data);
     setEditedGymName(data.name);
+    refreshPlan();
     setEditing(false);
     setProfileSuccess("Gym name updated successfully.");
   }
@@ -245,14 +252,21 @@ export default function AppSidebar({ onLogout }) {
   );
 
   const ProfileButton = () => (
-    <button
-      type="button"
-      onClick={openProfile}
-      className="flex w-full cursor-pointer items-center gap-3 rounded-xl px-3 py-3 text-sm text-gray-300 transition hover:bg-white/5 hover:text-white"
-    >
-      <UserRound size={19} />
-      My Profile
-    </button>
+    <>
+      {subGym && (
+        <div className="mb-2 px-1">
+          <PlanBadge gym={subGym} onClick={openProfile} />
+        </div>
+      )}
+      <button
+        type="button"
+        onClick={openProfile}
+        className="flex w-full cursor-pointer items-center gap-3 rounded-xl px-3 py-3 text-sm text-gray-300 transition hover:bg-white/5 hover:text-white"
+      >
+        <UserRound size={19} />
+        My Profile
+      </button>
+    </>
   );
 
   const LogoutButton = () => (
@@ -274,7 +288,7 @@ export default function AppSidebar({ onLogout }) {
         className="absolute inset-0 cursor-default"
       />
 
-      <div className="relative z-10 w-full max-w-md overflow-hidden rounded-2xl border border-[#E8EDE9] bg-white shadow-2xl">
+      <div className="relative z-10 max-h-[90vh] w-full max-w-md overflow-y-auto rounded-2xl border border-[#E8EDE9] bg-white shadow-2xl">
         {/* Header */}
         <div className="flex items-center justify-between border-b border-[#E8EDE9] px-6 py-5">
           <div>
@@ -421,6 +435,14 @@ export default function AppSidebar({ onLogout }) {
                 </p>
               </div>
 
+              {/* Plan */}
+              <div className="mb-5">
+                <label className="mb-2 block text-xs font-semibold uppercase tracking-wider text-[#829087]">
+                  Subscription
+                </label>
+                <PlanCard gym={subGym} plans={plans} />
+              </div>
+
               {/* Feedback */}
               {profileError && (
                 <div
@@ -512,15 +534,6 @@ export default function AppSidebar({ onLogout }) {
       >
         <div className="mb-10 flex items-center justify-between px-2">
           <Logo />
-
-          <button
-            type="button"
-            onClick={() => setMobileOpen(false)}
-            aria-label="Close menu"
-            className="rounded-lg p-2 text-gray-400 hover:bg-white/10 hover:text-white"
-          >
-            <X size={20} />
-          </button>
         </div>
 
         <div className="min-h-0 flex-1 overflow-y-auto">
@@ -541,7 +554,7 @@ export default function AppSidebar({ onLogout }) {
       </aside>
 
       {/* Profile Popup */}
-      {profileOpen && <ProfileModal />}
+      {profileOpen && ProfileModal()}
     </>
   );
 }
