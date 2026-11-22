@@ -29,8 +29,8 @@ import PlanCard from "@/components/PlanCard";
 
 const navItems = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
-  { href: "/members", label: "Members", icon: Users },
   { href: "/plans", label: "Membership Plans", icon: CreditCard },
+  { href: "/members", label: "Members", icon: Users },
   { href: "/analytics", label: "Analytics", icon: ChartNoAxesCombined },
 ];
 

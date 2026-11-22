@@ -13,6 +13,8 @@ import MembersTable from "@/components/members/MembersTable";
 
 import MembersSkeleton from "@/components/members/MembersSkeleton";
 import MemberModals from "@/components/members/MemberModal";
+import MemberHistoryModal from "@/components/members/MemberHistoryModal";
+import { exportMembersToExcel } from "@/utils/exportMembers";
 import Footer from "@/components/shared/Footer";
 
 export default function MembersPage() {
@@ -37,6 +39,8 @@ export default function MembersPage() {
   const [showAdd, setShowAdd] = useState(false);
   const [renewMember, setRenewMember] = useState(null);
   const [showImport, setShowImport] = useState(false);
+  const [historyMember, setHistoryMember] = useState(null);
+  const [exporting, setExporting] = useState(false);
 
   // Add member form
   const [name, setName] = useState("");
@@ -410,6 +414,20 @@ export default function MembersPage() {
     }
   }
 
+  // Download all members and all their payments as an Excel file
+  async function handleExport() {
+    if (!gym?.id || exporting) return;
+    setExporting(true);
+
+    try {
+      await exportMembersToExcel({ gym, members, plans });
+    } catch (err) {
+      window.alert(err.message || "Could not create the Excel file.");
+    } finally {
+      setExporting(false);
+    }
+  }
+
   async function importMembers(rows) {
     if (!gym?.id || !rows.length) return;
 
@@ -531,6 +549,9 @@ export default function MembersPage() {
           filter={filter}
           setFilter={setFilter}
           onRenew={openRenew}
+          onViewHistory={setHistoryMember}
+          onExport={handleExport}
+          exporting={exporting}
           onAddMember={() => {
             resetAddForm();
             setShowAdd(true);
@@ -539,6 +560,19 @@ export default function MembersPage() {
 
         <Footer />
       </main>
+
+      {historyMember && (
+        <MemberHistoryModal
+          member={historyMember}
+          plans={plans}
+          gymName={gym?.name}
+          onClose={() => setHistoryMember(null)}
+          onRenew={(m) => {
+            setHistoryMember(null);
+            openRenew(m);
+          }}
+        />
+      )}
 
      <MemberModals
   showAdd={showAdd}
