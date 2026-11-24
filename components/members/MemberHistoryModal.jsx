@@ -1,10 +1,17 @@
-// components/members/MemberHistoryModal.js
-"use client";
-
 import { useEffect, useState } from "react";
-import { X, LoaderCircle, AlertCircle, RefreshCw, MessageCircle, Download } from "lucide-react";
+
+import {
+  X,
+  LoaderCircle,
+  AlertCircle,
+  RefreshCw,
+  Download,
+  Pencil,
+  Save,
+} from "lucide-react";
+
 import { supabase } from "@/lib/supabase";
-import { getStatus, daysLeft } from "@/utils/memberUtils";
+import { getStatus, daysLeft, today } from "@/utils/memberUtils";
 import { downloadReceipt } from "@/utils/receipt";
 import { FaWhatsapp } from "react-icons/fa";
 
@@ -25,7 +32,9 @@ function fmtDate(str) {
 
 function fmtMode(mode) {
   if (!mode) return "-";
-  return mode.toLowerCase() === "upi" ? "UPI" : mode.charAt(0).toUpperCase() + mode.slice(1);
+  return mode.toLowerCase() === "upi"
+    ? "UPI"
+    : mode.charAt(0).toUpperCase() + mode.slice(1);
 }
 
 const STATUS_STYLE = {
@@ -34,13 +43,26 @@ const STATUS_STYLE = {
   Expired: "bg-red-100 text-red-700",
 };
 
-export default function MemberHistoryModal({ member, plans = [], gymName, onClose, onRenew }) {
+export default function MemberHistoryModal({
+  member,
+  plans = [],
+  gymName,
+  onClose,
+  onRenew,
+  onPaymentUpdated,
+}) {
   const [payments, setPayments] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [showAll, setShowAll] = useState(false);
   const [receiptBusy, setReceiptBusy] = useState(false);
   const [receiptError, setReceiptError] = useState("");
+  const [editingPayment, setEditingPayment] = useState(null);
+  const [editAmount, setEditAmount] = useState("");
+  const [editMode, setEditMode] = useState("cash");
+  const [editPaidOn, setEditPaidOn] = useState("");
+  const [editSaving, setEditSaving] = useState(false);
+  const [editError, setEditError] = useState("");
 
   useEffect(() => {
     let cancelled = false;
@@ -74,30 +96,185 @@ export default function MemberHistoryModal({ member, plans = [], gymName, onClos
     return () => window.removeEventListener("keydown", onKey);
   }, [onClose]);
 
-  const planName = (id) => plans.find((p) => String(p.id) === String(id))?.name || "-";
+  useEffect(() => {
+  function onKey(e) {
+    if (e.key !== "Escape" || editSaving) return;
+
+    if (editingPayment) {
+      setEditingPayment(null);
+      setEditError("");
+      return;
+    }
+
+    onClose();
+  }
+
+  window.addEventListener("keydown", onKey);
+
+  return () => {
+    window.removeEventListener("keydown", onKey);
+  };
+}, [onClose, editingPayment, editSaving]);
+
+  function openEditPayment(payment) {
+    setEditError("");
+    setEditAmount(String(payment.amount ?? ""));
+    setEditMode(payment.mode || "cash");
+    setEditPaidOn(String(payment.paid_on || "").slice(0, 10));
+    setEditingPayment(payment);
+  }
+
+  function closeEditPayment() {
+    if (editSaving) return;
+
+    setEditingPayment(null);
+    setEditError("");
+    setEditAmount("");
+    setEditMode("cash");
+    setEditPaidOn("");
+  }
+
+  async function updatePayment(e) {
+    e.preventDefault();
+
+    if (editSaving || !editingPayment) return;
+
+    setEditError("");
+
+    if (!member.gym_id) {
+      setEditError("Gym information is unavailable.");
+      return;
+    }
+
+    if (
+      editAmount.trim() === "" ||
+      !Number.isFinite(Number(editAmount)) ||
+      Number(editAmount) < 0
+    ) {
+      setEditError("Please enter a valid payment amount.");
+      return;
+    }
+
+    if (!["cash", "upi", "card", "other"].includes(editMode)) {
+      setEditError("Please select a valid payment method.");
+      return;
+    }
+
+    if (!editPaidOn || editPaidOn > today()) {
+      setEditError("Please enter a valid payment date.");
+      return;
+    }
+
+    if (member.join_date && editPaidOn < member.join_date) {
+      setEditError("Payment date cannot be before the member's joining date.");
+      return;
+    }
+
+    setEditSaving(true);
+
+    try {
+      const { data, error: updateError } = await supabase
+        .from("payments")
+        .update({
+          amount: Number(editAmount),
+          mode: editMode,
+          paid_on: editPaidOn,
+        })
+        .eq("id", editingPayment.id)
+        .eq("member_id", member.id)
+        .eq("gym_id", member.gym_id)
+        .select("id, amount, mode, paid_on, plan_id")
+        .single();
+
+      if (updateError) {
+        setEditError(updateError.message);
+        return;
+      }
+
+      // Update and reorder local payment history
+      setPayments((previous) =>
+        previous
+          .map((payment) => (payment.id === data.id ? data : payment))
+          .sort((a, b) => String(b.paid_on).localeCompare(String(a.paid_on))),
+      );
+
+      setEditingPayment(null);
+      setEditError("");
+      setReceiptError("");
+
+      // Refresh parent members table
+      try {
+        await onPaymentUpdated?.();
+      } catch {
+        setError("Payment saved, but member data could not be refreshed.");
+      }
+    } catch (err) {
+      setEditError(err.message || "Unable to update payment.");
+    } finally {
+      setEditSaving(false);
+    }
+  }
+
+  const planName = (id) =>
+    plans.find((p) => String(p.id) === String(id))?.name || "-";
   const total = payments.reduce((sum, p) => sum + Number(p.amount || 0), 0);
   const visible = showAll ? payments : payments.slice(0, SHOW_FIRST);
 
   // Receipt for the latest payment; next payment = the member's current expiry date
-  async function handleReceipt() {
-    const latest = payments[0];
-    if (!latest || receiptBusy) return;
-    setReceiptBusy(true);
-    setReceiptError("");
-    try {
-      await downloadReceipt({
-        gymName,
-        memberName: member.name,
-        amount: latest.amount,
-        paidOn: latest.paid_on,
-        nextDue: member.expiry_date,
-      });
-    } catch (err) {
-      setReceiptError(err.message || "Could not create the receipt.");
-    } finally {
-      setReceiptBusy(false);
+async function handleReceipt() {
+  const latest = payments[0];
+
+  if (!latest || receiptBusy) return;
+
+  setReceiptBusy(true);
+  setReceiptError("");
+
+  try {
+    if (!member.gym_id) {
+      throw new Error("Gym information is unavailable.");
     }
+
+    // Fetch latest gym profile details
+    const { data: gymData, error: gymError } = await supabase
+      .from("gyms")
+      .select(`
+        name,
+        mobile_number,
+        registration_type,
+        registration_number
+      `)
+      .eq("id", member.gym_id)
+      .single();
+
+    if (gymError) {
+      throw new Error(gymError.message);
+    }
+
+    await downloadReceipt({
+      gymName: gymData.name || gymName,
+      gymMobile: gymData.mobile_number,
+      registrationType: gymData.registration_type,
+      registrationNumber: gymData.registration_number,
+
+      memberName: member.name,
+      memberMobile: member.phone,
+
+      paymentId: latest.id,
+      paymentMode: latest.mode,
+      planName: planName(latest.plan_id),
+
+      amount: latest.amount,
+      paidOn: latest.paid_on,
+      nextDue: member.expiry_date,
+    });
+  } catch (err) {
+    setReceiptError(
+      err.message || "Could not create the receipt.",
+    );
+  } finally {
+    setReceiptBusy(false);
   }
+}
 
   const status = getStatus(member.expiry_date);
   const left = daysLeft(member.expiry_date);
@@ -105,7 +282,7 @@ export default function MemberHistoryModal({ member, plans = [], gymName, onClos
     ? `https://wa.me/91${member.phone}?text=${encodeURIComponent(
         `Hi ${member.name}, your gym membership ${
           left !== null && left < 0 ? "expired on" : "expires on"
-        } ${fmtDate(member.expiry_date)}. Please renew to continue.`
+        } ${fmtDate(member.expiry_date)}. Please renew to continue.`,
       )}`
     : null;
 
@@ -127,7 +304,9 @@ export default function MemberHistoryModal({ member, plans = [], gymName, onClos
         {/* Header */}
         <div className="flex items-start justify-between gap-3 border-b border-[#E8EDE9] px-4 py-5 sm:px-6">
           <div className="min-w-0">
-            <h2 className="truncate text-lg font-bold text-[#17211A]">{member.name}</h2>
+            <h2 className="truncate text-lg font-bold text-[#17211A]">
+              {member.name}
+            </h2>
             <p className="mt-1 text-sm text-[#829087]">{member.phone}</p>
           </div>
           <button
@@ -144,23 +323,35 @@ export default function MemberHistoryModal({ member, plans = [], gymName, onClos
           {/* Summary */}
           <div className="mb-5 grid grid-cols-3 gap-3">
             <div className="rounded-xl bg-[#F8FAF8] p-3">
-              <p className="text-[11px] font-semibold uppercase tracking-wider text-[#829087]">Total paid</p>
-              <p className="mt-1 text-sm font-bold sm:text-base text-[#17211A]">{loading ? "-" : inr(total)}</p>
+              <p className="text-[11px] font-semibold uppercase tracking-wider text-[#829087]">
+                Total paid
+              </p>
+              <p className="mt-1 text-sm font-bold sm:text-base text-[#17211A]">
+                {loading ? "-" : inr(total)}
+              </p>
             </div>
             <div className="rounded-xl bg-[#F8FAF8] p-3">
-              <p className="text-[11px] font-semibold uppercase tracking-wider text-[#829087]">Last paid</p>
+              <p className="text-[11px] font-semibold uppercase tracking-wider text-[#829087]">
+                Last paid
+              </p>
               <p className="mt-1 text-sm font-bold sm:text-base text-[#17211A]">
                 {loading || !payments[0] ? "-" : fmtDate(payments[0].paid_on)}
               </p>
             </div>
             <div className="rounded-xl bg-[#F8FAF8] p-3">
-              <p className="text-[11px] font-semibold uppercase tracking-wider text-[#829087]">Expires</p>
-              <p className="mt-1 text-sm font-bold sm:text-base text-[#17211A]">{fmtDate(member.expiry_date)}</p>
+              <p className="text-[11px] font-semibold uppercase tracking-wider text-[#829087]">
+                Expires
+              </p>
+              <p className="mt-1 text-sm font-bold sm:text-base text-[#17211A]">
+                {fmtDate(member.expiry_date)}
+              </p>
             </div>
           </div>
 
           <div className="mb-5 flex flex-wrap items-center gap-2 text-sm text-[#526157]">
-            <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${STATUS_STYLE[status] || ""}`}>
+            <span
+              className={`rounded-full px-2.5 py-1 text-xs font-semibold ${STATUS_STYLE[status] || ""}`}
+            >
               {status}
             </span>
             <span>Plan: {member.plans?.name || planName(member.plan_id)}</span>
@@ -194,13 +385,214 @@ export default function MemberHistoryModal({ member, plans = [], gymName, onClos
           <h3 className="mb-3 text-xs font-semibold uppercase tracking-wider text-[#829087]">
             Payment history
           </h3>
+          {editingPayment && (
+  <div className="mb-5 rounded-2xl border border-[#DCE4DE] bg-[#F8FAF8] p-4 sm:p-5">
+    {/* Header */}
+    <div className="mb-4 flex items-start justify-between gap-3">
+      <div className="flex items-center gap-3">
+        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#EEF4E8] text-[#52772D]">
+          <Pencil size={18} />
+        </div>
+
+        <div>
+          <h3 className="text-sm font-bold text-[#17211A]">
+            Edit payment
+          </h3>
+
+          <p className="mt-1 text-xs text-[#829087]">
+            Correct an existing payment record.
+          </p>
+        </div>
+      </div>
+
+      <button
+        type="button"
+        onClick={closeEditPayment}
+        disabled={editSaving}
+        className="cursor-pointer rounded-lg p-2 text-gray-500 hover:bg-gray-100 disabled:opacity-50"
+        aria-label="Close payment editor"
+      >
+        <X size={17} />
+      </button>
+    </div>
+
+    {/* Original payment */}
+    <div className="mb-4 flex items-center justify-between rounded-xl border border-[#E8EDE9] bg-white p-3">
+      <div>
+        <p className="text-xs text-[#829087]">
+          Original payment
+        </p>
+
+        <p className="mt-1 text-sm font-bold text-[#17211A]">
+          {inr(editingPayment.amount)}
+        </p>
+      </div>
+
+      <div className="text-right">
+        <p className="text-xs text-[#829087]">
+          Payment date
+        </p>
+
+        <p className="mt-1 text-sm font-semibold text-[#17211A]">
+          {fmtDate(editingPayment.paid_on)}
+        </p>
+      </div>
+    </div>
+
+    <form onSubmit={updatePayment} className="space-y-4">
+      {/* Amount and payment method */}
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <div className="space-y-2">
+          <label className="text-sm font-semibold text-gray-700">
+            Amount (₹)
+          </label>
+
+          <input
+            type="number"
+            min="0"
+            step="0.01"
+            value={editAmount}
+            onChange={(e) => setEditAmount(e.target.value)}
+            disabled={editSaving}
+            required
+            className="w-full rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm text-gray-900 outline-none transition focus:border-[#8BC34A] focus:ring-2 focus:ring-[#8BC34A]/15"
+          />
+        </div>
+
+        <div className="space-y-2">
+          <label className="text-sm font-semibold text-gray-700">
+            Payment method
+          </label>
+
+          <select
+            value={editMode}
+            onChange={(e) => setEditMode(e.target.value)}
+            disabled={editSaving}
+            required
+            className="w-full rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm text-gray-900 outline-none transition focus:border-[#8BC34A] focus:ring-2 focus:ring-[#8BC34A]/15"
+          >
+            <option value="cash">Cash</option>
+            <option value="upi">UPI</option>
+            <option value="card">Card</option>
+            <option value="other">Other</option>
+          </select>
+        </div>
+      </div>
+
+      {/* Payment date */}
+      <div className="space-y-2">
+        <label className="text-sm font-semibold text-gray-700">
+          Payment date
+        </label>
+
+        <input
+          type="date"
+          value={editPaidOn}
+          onChange={(e) => setEditPaidOn(e.target.value)}
+          min={member.join_date || undefined}
+          max={today()}
+          disabled={editSaving}
+          required
+          className="w-full rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm text-gray-900 outline-none transition focus:border-[#8BC34A] focus:ring-2 focus:ring-[#8BC34A]/15"
+        />
+      </div>
+
+      {/* Revenue adjustment preview */}
+      {editAmount !== "" &&
+        Number.isFinite(Number(editAmount)) &&
+        Number(editAmount) >= 0 &&
+        Number(editAmount) !== Number(editingPayment.amount) && (
+          <div className="flex items-center justify-between rounded-xl border border-[#E4EED9] bg-[#F3F8ED] p-3">
+            <p className="text-xs font-medium text-gray-600">
+              Revenue adjustment
+            </p>
+
+            <p
+              className={`text-sm font-bold ${
+                Number(editAmount) >
+                Number(editingPayment.amount)
+                  ? "text-green-700"
+                  : "text-red-600"
+              }`}
+            >
+              {Number(editAmount) >
+              Number(editingPayment.amount)
+                ? "+"
+                : "-"}
+              {inr(
+                Math.abs(
+                  Number(editAmount) -
+                    Number(editingPayment.amount),
+                ),
+              )}
+            </p>
+          </div>
+        )}
+
+      {/* Warning */}
+      <div className="rounded-xl border border-orange-100 bg-orange-50 p-3">
+        <div className="flex items-start gap-2">
+          <AlertCircle
+            size={16}
+            className="mt-0.5 shrink-0 text-orange-600"
+          />
+
+          <p className="text-xs leading-relaxed text-orange-700">
+            Editing this payment will affect recorded revenue
+            and newly generated receipts. Membership expiry
+            and plan will remain unchanged.
+          </p>
+        </div>
+      </div>
+
+      {/* Error */}
+      {editError && (
+        <div
+          role="alert"
+          className="rounded-xl border border-red-100 bg-red-50 p-3 text-sm text-red-600"
+        >
+          {editError}
+        </div>
+      )}
+
+      {/* Actions */}
+      <div className="flex gap-3">
+        <button
+          type="button"
+          onClick={closeEditPayment}
+          disabled={editSaving}
+          className="flex-1 cursor-pointer rounded-xl border border-gray-200 bg-white py-3 text-sm font-semibold text-gray-600 transition hover:bg-gray-50 disabled:opacity-50"
+        >
+          Cancel
+        </button>
+
+        <button
+          type="submit"
+          disabled={editSaving}
+          className="flex flex-1 cursor-pointer items-center justify-center gap-2 rounded-xl bg-[#17211A] py-3 text-sm font-semibold text-white transition hover:bg-[#304B32] disabled:opacity-50"
+        >
+          {editSaving ? (
+            <LoaderCircle size={16} className="animate-spin" />
+          ) : (
+            <Save size={16} />
+          )}
+
+          {editSaving ? "Saving..." : "Save changes"}
+        </button>
+      </div>
+    </form>
+  </div>
+)}
 
           {loading ? (
             <div className="flex justify-center py-8">
               <LoaderCircle size={26} className="animate-spin text-[#8BC34A]" />
             </div>
           ) : error ? (
-            <div role="alert" className="flex items-start gap-2 rounded-xl border border-red-100 bg-red-50 p-3 text-sm text-red-600">
+            <div
+              role="alert"
+              className="flex items-start gap-2 rounded-xl border border-red-100 bg-red-50 p-3 text-sm text-red-600"
+            >
               <AlertCircle size={17} className="mt-0.5 shrink-0" />
               <span>{error}</span>
             </div>
@@ -212,14 +604,37 @@ export default function MemberHistoryModal({ member, plans = [], gymName, onClos
             <>
               <ul className="divide-y divide-[#E8EDE9] rounded-xl border border-[#E8EDE9]">
                 {visible.map((p) => (
-                  <li key={p.id} className="flex items-center justify-between gap-3 px-4 py-3.5">
+                  <li
+                    key={p.id}
+                    className="flex items-center justify-between gap-3 px-4 py-3.5"
+                  >
                     <div className="min-w-0">
-                      <p className="text-sm font-semibold text-[#17211A]">{fmtDate(p.paid_on)}</p>
+                      <p className="text-sm font-semibold text-[#17211A]">
+                        {fmtDate(p.paid_on)}
+                      </p>
                       <p className="text-xs text-[#829087]">
                         {planName(p.plan_id)} · {fmtMode(p.mode)}
                       </p>
                     </div>
-                    <p className="shrink-0 text-sm font-bold text-[#17211A]">{inr(p.amount)}</p>
+                    <div className="flex shrink-0 items-center gap-3">
+                      <p className="text-sm font-bold text-[#17211A]">
+                        {inr(p.amount)}
+                      </p>
+
+                      <button
+                        type="button"
+                        onClick={() => openEditPayment(p)}
+                        disabled={editSaving}
+                        title="Edit payment"
+                        aria-label={`Edit payment from ${fmtDate(p.paid_on)}`}
+                        className="flex h-8 w-8 cursor-pointer items-center
+      justify-center rounded-lg border border-[#DCE4DE]
+      text-[#52772D] transition hover:bg-[#EEF4E8]
+      disabled:opacity-50"
+                      >
+                        <Pencil size={14} />
+                      </button>
+                    </div>
                   </li>
                 ))}
               </ul>
