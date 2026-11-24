@@ -41,6 +41,14 @@ export default function MembersPage() {
   const [showImport, setShowImport] = useState(false);
   const [historyMember, setHistoryMember] = useState(null);
   const [exporting, setExporting] = useState(false);
+  const [editingMember, setEditingMember] = useState(null);
+  const [adjustingMember, setAdjustingMember] = useState(null);
+
+  // Edit member form
+  const [editName, setEditName] = useState("");
+  const [editPhone, setEditPhone] = useState("");
+  const [editJoinDate, setEditJoinDate] = useState("");
+  const [editError, setEditError] = useState("");
 
   // Add member form
   const [name, setName] = useState("");
@@ -53,6 +61,11 @@ export default function MembersPage() {
   const [rPlanId, setRPlanId] = useState("");
   const [rAmount, setRAmount] = useState("");
   const [rMode, setRMode] = useState("cash");
+
+  // Adjust membership form
+  const [adjustPlanId, setAdjustPlanId] = useState("");
+  const [adjustExpiryDate, setAdjustExpiryDate] = useState("");
+  const [adjustError, setAdjustError] = useState("");
 
   // Fetch members and payments
   async function loadMembers(gymId = gym?.id) {
@@ -213,6 +226,161 @@ export default function MembersPage() {
     setAmount("");
     setMode("cash");
     setError("");
+  }
+
+  function openAdjustMembership(member) {
+    setAdjustError("");
+
+    setAdjustPlanId(member.plan_id ? String(member.plan_id) : "");
+
+    setAdjustExpiryDate(member.expiry_date || "");
+
+    setAdjustingMember(member);
+  }
+
+  async function adjustMembership(e) {
+    e.preventDefault();
+
+    if (saving) return;
+
+    setAdjustError("");
+
+    if (!adjustingMember || !gym?.id) {
+      setAdjustError("Member information is unavailable.");
+      return;
+    }
+
+    const plan = plans.find((p) => String(p.id) === String(adjustPlanId));
+
+    if (!plan) {
+      setAdjustError("Please select a valid membership plan.");
+      return;
+    }
+
+    if (!adjustExpiryDate) {
+      setAdjustError("Please select an expiry date.");
+      return;
+    }
+
+    if (
+      adjustingMember.join_date &&
+      adjustExpiryDate < adjustingMember.join_date
+    ) {
+      setAdjustError("Expiry date cannot be before the joining date.");
+      return;
+    }
+
+    setSaving(true);
+
+    try {
+      const { error: updateError } = await supabase
+        .from("members")
+        .update({
+          plan_id: plan.id,
+          expiry_date: adjustExpiryDate,
+        })
+        .eq("id", adjustingMember.id)
+        .eq("gym_id", gym.id)
+        .select("id")
+        .single();
+
+      if (updateError) {
+        setAdjustError(updateError.message);
+        return;
+      }
+
+      setAdjustingMember(null);
+      setAdjustPlanId("");
+      setAdjustExpiryDate("");
+      setAdjustError("");
+
+      await loadMembers(gym.id);
+    } catch (err) {
+      setAdjustError(err.message || "Unable to adjust membership.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  function openEditMember(member) {
+    setEditError("");
+
+    setEditName(member.name || "");
+    setEditPhone(member.phone || "");
+    setEditJoinDate(member.join_date || "");
+
+    setEditingMember(member);
+  }
+
+  // Update existing member
+  async function updateMember(e) {
+    e.preventDefault();
+
+    if (saving) return;
+
+    setEditError("");
+
+    if (!editingMember || !gym?.id) {
+      setEditError("Member information is unavailable.");
+      return;
+    }
+
+    if (!editName.trim()) {
+      setEditError("Please enter member name.");
+      return;
+    }
+
+    if (!/^\d{10}$/.test(editPhone.trim())) {
+      setEditError("Please enter a valid 10-digit phone number.");
+      return;
+    }
+
+    if (!editJoinDate || editJoinDate > today()) {
+      setEditError("Please enter a valid joining date.");
+      return;
+    }
+
+    if (editingMember.expiry_date && editJoinDate > editingMember.expiry_date) {
+      setEditError("Joining date cannot be after the membership expiry date.");
+      return;
+    }
+
+    setSaving(true);
+
+    try {
+      const { error: updateError } = await supabase
+        .from("members")
+        .update({
+          name: editName.trim(),
+          phone: editPhone.trim(),
+          join_date: editJoinDate,
+        })
+        .eq("id", editingMember.id)
+        .eq("gym_id", gym.id)
+        .select("id")
+        .single();
+
+      if (updateError) {
+        setEditError(updateError.message);
+        return;
+      }
+
+      // Close edit modal
+      setEditingMember(null);
+
+      // Reset edit form
+      setEditName("");
+      setEditPhone("");
+      setEditJoinDate("");
+      setEditError("");
+
+      // Refresh members
+      await loadMembers(gym.id);
+    } catch (err) {
+      setEditError(err.message || "Unable to update member details.");
+    } finally {
+      setSaving(false);
+    }
   }
 
   // Add member plan selection
@@ -550,6 +718,8 @@ export default function MembersPage() {
           setFilter={setFilter}
           onRenew={openRenew}
           onViewHistory={setHistoryMember}
+          onEdit={openEditMember}
+          onAdjustMembership={openAdjustMembership}
           onExport={handleExport}
           exporting={exporting}
           onAddMember={() => {
@@ -574,43 +744,66 @@ export default function MembersPage() {
         />
       )}
 
-     <MemberModals
-  showAdd={showAdd}
-  setShowAdd={setShowAdd}
-  showImport={showImport}
-  setShowImport={setShowImport}
-  existingMembers={members}
-  onImportMembers={importMembers}
-  renewMember={renewMember}
-  setRenewMember={setRenewMember}
-  plans={plans}
-  saving={saving}
-  error={error}
-  renewError={renewError}
-  form={{
-    name,
-    setName,
-    phone,
-    setPhone,
-    planId,
-    amount,
-    setAmount,
-    mode,
-    setMode,
-    rPlanId,
-    rAmount,
-    setRAmount,
-    rMode,
-    setRMode,
-  }}
-  handlers={{
-    addMember,
-    renew,
-    resetAddForm,
-    onPlanChange,
-    onRenewPlanChange,
-  }}
-/>
+      <MemberModals
+        showAdd={showAdd}
+        setShowAdd={setShowAdd}
+        showImport={showImport}
+        setShowImport={setShowImport}
+        existingMembers={members}
+        onImportMembers={importMembers}
+        renewMember={renewMember}
+        setRenewMember={setRenewMember}
+        editingMember={editingMember}
+        setEditingMember={setEditingMember}
+        plans={plans}
+        saving={saving}
+        error={error}
+        renewError={renewError}
+        editError={editError}
+        adjustingMember={adjustingMember}
+        setAdjustingMember={setAdjustingMember}
+        adjustError={adjustError}
+        form={{
+          name,
+          setName,
+          phone,
+          setPhone,
+          planId,
+          amount,
+          setAmount,
+          mode,
+          setMode,
+
+          // Renewal form
+          rPlanId,
+          rAmount,
+          setRAmount,
+          rMode,
+          setRMode,
+
+          // Edit member form
+          editName,
+          setEditName,
+          editPhone,
+          setEditPhone,
+          editJoinDate,
+          setEditJoinDate,
+
+          adjustPlanId,
+          setAdjustPlanId,
+          adjustExpiryDate,
+          setAdjustExpiryDate,
+        }}
+        handlers={{
+          addMember,
+          renew,
+          resetAddForm,
+          onPlanChange,
+          onRenewPlanChange,
+          updateMember,
+          adjustMembership,
+        }}
+      />
     </div>
   );
 }

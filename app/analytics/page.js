@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
@@ -9,7 +8,9 @@ import RevenueStats from "@/components/analytics/RevenueStats";
 import RevenueChart from "@/components/analytics/RevenueChart";
 import PeriodComparison from "@/components/analytics/PeriodComparison";
 import PaymentBreakdown from "@/components/analytics/PaymentBreakdown";
-
+import ProfitSummary from "@/components/analytics/ProfitSummary";
+import ExpenseBreakdown from "@/components/analytics/ExpenseBreakdown";
+import ExpenseManager from "@/components/analytics/ExpenseManager";
 import {
   IndianRupee,
   ReceiptText,
@@ -69,9 +70,7 @@ function getChartData(payments, range, today, selectedMonth, selectedYear) {
 
     const isCurrentMonth = monthKey === today.slice(0, 7);
 
-    const totalDays = isCurrentMonth
-      ? currentDay
-      : daysInMonth;
+    const totalDays = isCurrentMonth ? currentDay : daysInMonth;
 
     return Array.from({ length: totalDays }, (_, index) => {
       const day = index + 1;
@@ -80,10 +79,7 @@ function getChartData(payments, range, today, selectedMonth, selectedYear) {
 
       const value = payments
         .filter((payment) => payment.paid_on === date)
-        .reduce(
-          (sum, payment) => sum + Number(payment.amount || 0),
-          0,
-        );
+        .reduce((sum, payment) => sum + Number(payment.amount || 0), 0);
 
       return {
         label: String(day),
@@ -95,9 +91,7 @@ function getChartData(payments, range, today, selectedMonth, selectedYear) {
   if (range === "year") {
     const year = Number(selectedYear);
 
-    const totalMonths = year === currentYear
-      ? currentMonth
-      : 12;
+    const totalMonths = year === currentYear ? currentMonth : 12;
 
     return Array.from({ length: totalMonths }, (_, index) => {
       const month = String(index + 1).padStart(2, "0");
@@ -105,16 +99,12 @@ function getChartData(payments, range, today, selectedMonth, selectedYear) {
 
       const value = payments
         .filter((payment) => getMonthKey(payment.paid_on) === key)
-        .reduce(
-          (sum, payment) => sum + Number(payment.amount || 0),
-          0,
-        );
+        .reduce((sum, payment) => sum + Number(payment.amount || 0), 0);
 
       return {
-        label: new Date(`${key}-01T00:00:00`).toLocaleDateString(
-          "en-IN",
-          { month: "short" },
-        ),
+        label: new Date(`${key}-01T00:00:00`).toLocaleDateString("en-IN", {
+          month: "short",
+        }),
         value,
       };
     });
@@ -124,28 +114,55 @@ function getChartData(payments, range, today, selectedMonth, selectedYear) {
     .map((payment) => Number((payment.paid_on || "").slice(0, 4)))
     .filter((year) => Number.isFinite(year) && year > 0);
 
-  const firstYear = years.length
-    ? Math.min(...years)
-    : currentYear;
+  const firstYear = years.length ? Math.min(...years) : currentYear;
 
-  return Array.from(
-    { length: currentYear - firstYear + 1 },
-    (_, index) => {
-      const year = firstYear + index;
+  return Array.from({ length: currentYear - firstYear + 1 }, (_, index) => {
+    const year = firstYear + index;
 
-      const value = payments
-        .filter((payment) => payment.paid_on?.startsWith(String(year)))
-        .reduce(
-          (sum, payment) => sum + Number(payment.amount || 0),
-          0,
-        );
+    const value = payments
+      .filter((payment) => payment.paid_on?.startsWith(String(year)))
+      .reduce((sum, payment) => sum + Number(payment.amount || 0), 0);
 
-      return {
-        label: String(year),
-        value,
-      };
-    },
-  );
+    return {
+      label: String(year),
+      value,
+    };
+  });
+}
+
+async function fetchAllRows(table, columns, gymId) {
+  const pageSize = 1000;
+  let rows = [];
+  let from = 0;
+
+  while (true) {
+    const { data, error } = await supabase
+      .from(table)
+      .select(columns)
+      .eq("gym_id", gymId)
+      .order("paid_on", { ascending: true })
+      .order("id", { ascending: true })
+      .range(from, from + pageSize - 1);
+
+    if (error) throw error;
+
+    rows = [...rows, ...(data || [])];
+    if (!data || data.length < pageSize) break;
+    from += pageSize;
+  }
+
+  return rows;
+}
+
+function filterByRange(rows, range, selectedMonth, selectedYear) {
+  if (range === "month") {
+    const key = `${selectedYear}-${selectedMonth}`;
+    return rows.filter((r) => r.paid_on?.startsWith(key));
+  }
+  if (range === "year") {
+    return rows.filter((r) => r.paid_on?.startsWith(String(selectedYear)));
+  }
+  return rows;
 }
 
 function InsightCard({ icon: Icon, label, value, description }) {
@@ -159,9 +176,7 @@ function InsightCard({ icon: Icon, label, value, description }) {
         <p className="text-sm font-medium text-gray-500">{label}</p>
       </div>
 
-      <h3 className="text-xl font-bold text-[#17211A] mt-4">
-        {value}
-      </h3>
+      <h3 className="text-xl font-bold text-[#17211A] mt-4">{value}</h3>
 
       <p className="text-xs text-gray-400 mt-1">{description}</p>
     </div>
@@ -202,6 +217,9 @@ export default function AnalyticsPage() {
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState("");
 
+  const [expenses, setExpenses] = useState([]);
+  const [gymId, setGymId] = useState(null);
+
   // Initialize current date after mounting.
   useEffect(() => {
     const currentDate = getLocalDate();
@@ -211,92 +229,95 @@ export default function AnalyticsPage() {
     setSelectedYear(Number(currentDate.slice(0, 4)));
   }, []);
 
-  async function loadAnalytics(isRefresh = false) {
-    try {
-      if (isRefresh) {
-        setRefreshing(true);
-      } else {
-        setLoading(true);
-      }
-
-      setError("");
-
-      const {
-        data: { session },
-        error: sessionError,
-      } = await supabase.auth.getSession();
-
-      if (sessionError) throw sessionError;
-
-      if (!session) {
-        throw new Error("Please log in to view analytics.");
-      }
-
-      const { data: gymData, error: gymError } = await supabase
-        .from("gyms")
-        .select("*")
-        .limit(1)
-        .single();
-
-      if (gymError) throw gymError;
-
-      // Fetch all payment rows in batches.
-      const pageSize = 1000;
-
-      let allPayments = [];
-      let from = 0;
-
-      while (true) {
-        const { data, error: paymentError } = await supabase
-          .from("payments")
-          .select("id, gym_id, amount, paid_on, mode, member_id, plan_id")
-          .eq("gym_id", gymData.id)
-          .order("paid_on", { ascending: true })
-          .order("id", { ascending: true })
-          .range(from, from + pageSize - 1);
-
-        if (paymentError) throw paymentError;
-
-        allPayments = [...allPayments, ...(data || [])];
-
-        if (!data || data.length < pageSize) break;
-
-        from += pageSize;
-      }
-
-      setPayments(allPayments);
-    } catch (err) {
-      console.error("Analytics error:", err);
-      setError(err.message || "Unable to load analytics.");
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
+ async function loadAnalytics(isRefresh = false) {
+  try {
+    if (isRefresh) {
+      setRefreshing(true);
+    } else {
+      setLoading(true);
     }
+
+    setError("");
+
+    // Verify authenticated user
+    const {
+      data: { user },
+      error: authError,
+    } = await supabase.auth.getUser();
+
+    if (authError) throw authError;
+
+    if (!user) {
+      throw new Error("Please log in to view analytics.");
+    }
+
+    // Fetch the gym belonging to the logged-in user
+    const { data: gymData, error: gymError } = await supabase
+      .from("gyms")
+      .select("id")
+      .eq("owner_id", user.id)
+      .limit(1)
+      .maybeSingle();
+
+    if (gymError) throw gymError;
+
+    if (!gymData?.id) {
+      throw new Error("Gym not found.");
+    }
+
+    // IMPORTANT: Set gym ID
+    setGymId(gymData.id);
+
+    // Fetch payments and expenses simultaneously
+    const [allPayments, allExpenses] = await Promise.all([
+      fetchAllRows(
+        "payments",
+        "id, gym_id, amount, paid_on, mode, member_id, plan_id",
+        gymData.id,
+      ),
+
+      fetchAllRows(
+        "expenses",
+        "id, gym_id, amount, paid_on, category, paid_to, mode, note",
+        gymData.id,
+      ),
+    ]);
+
+    setPayments(allPayments);
+    setExpenses(allExpenses);
+
+  } catch (err) {
+    console.error("Analytics error:", err);
+    setError(err.message || "Unable to load analytics.");
+  } finally {
+    setLoading(false);
+    setRefreshing(false);
   }
+}
 
   useEffect(() => {
     loadAnalytics();
   }, []);
 
   // Available years from recorded payment history + current year.
-  const availableYears = useMemo(() => {
-    if (!today) return [];
+const availableYears = useMemo(() => {
+  if (!today) return [];
 
-    const currentYear = Number(today.slice(0, 4));
+  const currentYear = Number(today.slice(0, 4));
 
-    const years = payments
-      .map((payment) => Number((payment.paid_on || "").slice(0, 4)))
-      .filter(
-        (year) =>
-          Number.isFinite(year) &&
-          year > 0 &&
-          year <= currentYear,
-      );
-
-    return [...new Set([...years, currentYear])].sort(
-      (a, b) => b - a,
+  const years = [...payments, ...expenses]
+    .map((record) => Number((record.paid_on || "").slice(0, 4)))
+    .filter(
+      (year) =>
+        Number.isFinite(year) &&
+        year > 0 &&
+        year <= currentYear,
     );
-  }, [payments, today]);
+
+  return [...new Set([...years, currentYear])].sort(
+    (a, b) => b - a,
+  );
+}, [payments, expenses, today]);
 
   // Fixed overview cards.
   const stats = useMemo(() => {
@@ -318,50 +339,39 @@ export default function AnalyticsPage() {
       ),
 
       month: getPaymentTotal(
-        payments.filter((payment) =>
-          payment.paid_on?.startsWith(currentMonth),
-        ),
+        payments.filter((payment) => payment.paid_on?.startsWith(currentMonth)),
       ),
 
       year: getPaymentTotal(
-        payments.filter((payment) =>
-          payment.paid_on?.startsWith(currentYear),
-        ),
+        payments.filter((payment) => payment.paid_on?.startsWith(currentYear)),
       ),
 
       lifetime: getPaymentTotal(payments),
     };
   }, [payments, today]);
 
-  // Payments for the selected month, year or lifetime.
-  const selectedPayments = useMemo(() => {
-    if (range === "month") {
-      const monthKey = `${selectedYear}-${selectedMonth}`;
 
-      return payments.filter((payment) =>
-        payment.paid_on?.startsWith(monthKey),
-      );
-    }
+  const selectedPayments = useMemo(
+    () => filterByRange(payments, range, selectedMonth, selectedYear),
+    [payments, range, selectedMonth, selectedYear],
+  );
 
-    if (range === "year") {
-      return payments.filter((payment) =>
-        payment.paid_on?.startsWith(String(selectedYear)),
-      );
-    }
+  const selectedExpenses = useMemo(
+    () => filterByRange(expenses, range, selectedMonth, selectedYear),
+    [expenses, range, selectedMonth, selectedYear],
+  );
 
-    return payments;
-  }, [payments, range, selectedMonth, selectedYear]);
+  const periodLabel = useMemo(() => {
+    if (range === "month")
+      return getMonthName(`${selectedYear}-${selectedMonth}`);
+    if (range === "year") return String(selectedYear);
+    return "Lifetime";
+  }, [range, selectedMonth, selectedYear]);
 
   // Chart changes according to selected period.
   const chartData = useMemo(
     () =>
-      getChartData(
-        selectedPayments,
-        range,
-        today,
-        selectedMonth,
-        selectedYear,
-      ),
+      getChartData(selectedPayments, range, today, selectedMonth, selectedYear),
     [selectedPayments, range, today, selectedMonth, selectedYear],
   );
 
@@ -436,10 +446,7 @@ export default function AnalyticsPage() {
             disabled={refreshing}
             className="inline-flex cursor-pointer items-center gap-2 text-sm font-semibold text-gray-600 hover:text-[#52772D] disabled:opacity-50 transition"
           >
-            <RefreshCw
-              size={15}
-              className={refreshing ? "animate-spin" : ""}
-            />
+            <RefreshCw size={15} className={refreshing ? "animate-spin" : ""} />
             Refresh data
           </button>
         </div>
@@ -453,16 +460,33 @@ export default function AnalyticsPage() {
           setSelectedYear={setSelectedYear}
           availableYears={availableYears}
         />
-
         <RevenueStats stats={stats} />
+
+        <ProfitSummary
+          income={getPaymentTotal(selectedPayments)}
+          expense={getPaymentTotal(selectedExpenses)}
+          label={`Incoming vs outgoing · ${periodLabel}`}
+        />
 
         <RevenueChart data={chartData} range={range} />
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
           <PeriodComparison payments={payments} />
-
           <PaymentBreakdown payments={selectedPayments} />
         </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+          <ExpenseBreakdown expenses={selectedExpenses} />
+          <ExpenseManager
+            gymId={gymId}
+            expenses={selectedExpenses}
+            today={today}
+            onChanged={() => loadAnalytics(true)}
+          />
+        </div>
+
+       
+
 
         <section>
           <div className="mb-4">

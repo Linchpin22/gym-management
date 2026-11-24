@@ -1,5 +1,12 @@
-import { X, Dumbbell, Plus, RefreshCw, CalendarDays } from "lucide-react";
-
+import {
+  X,
+  Dumbbell,
+  Plus,
+  RefreshCw,
+  CalendarDays,
+  Pencil,
+  CalendarCog,
+} from "lucide-react";
 import {
   today,
   addDays,
@@ -377,6 +384,233 @@ function RenewMemberModal({
   );
 }
 
+function EditMemberModal({ member, onClose, saving, error, form, handlers }) {
+  return (
+    <Modal
+      title="Edit member"
+      subtitle={`Update personal information for ${member.name}.`}
+      onClose={() => {
+        if (!saving) onClose();
+      }}
+    >
+      <form onSubmit={handlers.updateMember} className="space-y-5">
+        <div className="flex items-center gap-3 rounded-2xl border border-gray-100 bg-[#F7F9F7] p-4">
+          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-[#EEF4E8] font-bold text-[#52772D]">
+            {member.name?.charAt(0)?.toUpperCase() || "M"}
+          </div>
+
+          <div className="min-w-0 flex-1">
+            <p className="truncate font-bold text-gray-900">{member.name}</p>
+
+            <p className="mt-1 text-xs text-gray-500">
+              {member.plans?.name || "No plan"}
+            </p>
+          </div>
+
+          <StatusBadge expiry={member.expiry_date} />
+        </div>
+
+        <div>
+          <SectionTitle>Member information</SectionTitle>
+
+          <div className="space-y-4">
+            <Field label="Full name">
+              <input
+                value={form.editName}
+                onChange={(e) => form.setEditName(e.target.value)}
+                placeholder="Enter member name"
+                className={inputClass}
+                disabled={saving}
+                required
+              />
+            </Field>
+
+            <Field label="Phone number">
+              <input
+                type="tel"
+                inputMode="numeric"
+                value={form.editPhone}
+                onChange={(e) =>
+                  form.setEditPhone(
+                    e.target.value.replace(/\D/g, "").slice(0, 10),
+                  )
+                }
+                placeholder="10-digit mobile number"
+                maxLength={10}
+                pattern="[0-9]{10}"
+                className={inputClass}
+                disabled={saving}
+                required
+              />
+            </Field>
+
+            <Field label="Joining date">
+              <input
+                type="date"
+                value={form.editJoinDate}
+                onChange={(e) => form.setEditJoinDate(e.target.value)}
+                max={today()}
+                className={inputClass}
+                disabled={saving}
+                required
+              />
+            </Field>
+          </div>
+        </div>
+
+        <div className="rounded-xl border border-[#E4EED9] bg-[#F3F8ED] p-3">
+          <p className="text-xs leading-relaxed text-[#52772D]">
+            Changes to personal information will not affect membership expiry,
+            plans or payment history.
+          </p>
+        </div>
+
+        <FormError>{error}</FormError>
+
+        <ModalButtons
+          onCancel={onClose}
+          saving={saving}
+          submitText="Save changes"
+          loadingText="Saving..."
+          icon={Pencil}
+        />
+      </form>
+    </Modal>
+  );
+}
+
+function AdjustMembershipModal({
+  member,
+  plans,
+  onClose,
+  saving,
+  error,
+  form,
+  handlers,
+}) {
+  return (
+    <Modal
+      title="Adjust membership"
+      subtitle={`Modify membership details for ${member.name}.`}
+      onClose={() => {
+        if (!saving) onClose();
+      }}
+    >
+      <form onSubmit={handlers.adjustMembership} className="space-y-5">
+        {/* Member information */}
+        <div className="bg-[#F7F9F7] border border-gray-100 rounded-2xl p-4">
+          <div className="flex items-center gap-3">
+            <div className="w-11 h-11 shrink-0 rounded-xl bg-[#EEF4E8] text-[#52772D] flex items-center justify-center font-bold">
+              {member.name?.charAt(0)?.toUpperCase() || "M"}
+            </div>
+
+            <div className="min-w-0 flex-1">
+              <p className="font-bold text-gray-900 truncate">{member.name}</p>
+
+              <p className="text-xs text-gray-500 mt-1">{member.phone}</p>
+            </div>
+
+            <StatusBadge expiry={member.expiry_date} />
+          </div>
+
+          <div className="flex items-center justify-between mt-4 pt-3 border-t border-gray-200">
+            <div>
+              <p className="text-xs text-gray-500">Current plan</p>
+
+              <p className="text-sm font-semibold text-gray-800 mt-1">
+                {member.plans?.name || "No plan"}
+              </p>
+            </div>
+
+            <div className="text-right">
+              <p className="text-xs text-gray-500">Current expiry</p>
+
+              <p className="text-sm font-semibold text-gray-800 mt-1">
+                {formatDate(member.expiry_date)}
+              </p>
+            </div>
+          </div>
+        </div>
+
+        {/* Membership form */}
+        <div>
+          <SectionTitle>Membership adjustment</SectionTitle>
+
+          <div className="space-y-4">
+            <Field label="Membership plan">
+              <select
+                value={form.adjustPlanId}
+                onChange={(e) => form.setAdjustPlanId(e.target.value)}
+                className={inputClass}
+                disabled={saving}
+                required
+              >
+                <option value="">Select membership plan</option>
+
+                {plans.map((plan) => (
+                  <option key={plan.id} value={plan.id}>
+                    {plan.name} · {plan.duration_days} days
+                  </option>
+                ))}
+              </select>
+            </Field>
+
+            <Field label="Membership expiry date">
+              <input
+                type="date"
+                value={form.adjustExpiryDate}
+                onChange={(e) => form.setAdjustExpiryDate(e.target.value)}
+                min={member.join_date || undefined}
+                className={inputClass}
+                disabled={saving}
+                required
+              />
+            </Field>
+          </div>
+        </div>
+
+        {/* Updated membership preview */}
+        {form.adjustExpiryDate && (
+          <div className="flex items-center justify-between rounded-xl border border-[#E4EED9] bg-[#F3F8ED] p-4">
+            <div>
+              <p className="text-xs text-gray-500">Updated membership status</p>
+
+              <p className="text-sm font-bold text-[#17211A] mt-1">
+                {formatDate(form.adjustExpiryDate)}
+              </p>
+            </div>
+
+            <StatusBadge expiry={form.adjustExpiryDate} />
+          </div>
+        )}
+
+        {/* Important information */}
+        <div className="rounded-xl border border-orange-100 bg-orange-50 p-4">
+          <p className="text-sm font-semibold text-orange-800">
+            No payment will be recorded
+          </p>
+
+          <p className="mt-1 text-xs leading-relaxed text-orange-700">
+            This action only updates membership details. To record a new
+            payment, use the Renew membership option instead.
+          </p>
+        </div>
+
+        <FormError>{error}</FormError>
+
+        <ModalButtons
+          onCancel={onClose}
+          saving={saving}
+          disabled={!plans.length}
+          submitText="Save adjustment"
+          loadingText="Saving..."
+          icon={CalendarCog}
+        />
+      </form>
+    </Modal>
+  );
+}
+
 export default function MemberModals({
   showAdd,
   setShowAdd,
@@ -386,12 +620,18 @@ export default function MemberModals({
   onImportMembers,
   renewMember,
   setRenewMember,
+  editingMember,
+  setEditingMember,
   plans,
   saving,
   error,
   renewError,
+  editError,
   form,
   handlers,
+  adjustingMember,
+  setAdjustingMember,
+  adjustError,
 }) {
   return (
     <>
@@ -426,6 +666,29 @@ export default function MemberModals({
           plans={plans}
           saving={saving}
           error={renewError}
+          form={form}
+          handlers={handlers}
+        />
+      )}
+
+      {editingMember && (
+        <EditMemberModal
+          member={editingMember}
+          onClose={() => setEditingMember(null)}
+          saving={saving}
+          error={editError}
+          form={form}
+          handlers={handlers}
+        />
+      )}
+
+      {adjustingMember && (
+        <AdjustMembershipModal
+          member={adjustingMember}
+          plans={plans}
+          onClose={() => setAdjustingMember(null)}
+          saving={saving}
+          error={adjustError}
           form={form}
           handlers={handlers}
         />
