@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useEffect, useState } from "react";
@@ -101,12 +100,10 @@ export default function SetupGymPage() {
       return;
     }
 
-    const { error: insertError } = await supabase
-      .from("gyms")
-      .insert({
-        name,
-        owner_id: user.id,
-      });
+    const { error: insertError } = await supabase.from("gyms").insert({
+      name,
+      owner_id: user.id,
+    });
 
     if (insertError) {
       setError(insertError.message);
@@ -123,9 +120,7 @@ export default function SetupGymPage() {
       <main className="flex min-h-screen items-center justify-center bg-[#F5F7F6]">
         <div className="flex flex-col items-center gap-3">
           <div className="h-8 w-8 animate-spin rounded-full border-4 border-[#DCE4DE] border-t-[#8BC34A]" />
-          <p className="text-sm text-[#829087]">
-            Checking your account...
-          </p>
+          <p className="text-sm text-[#829087]">Checking your account...</p>
         </div>
       </main>
     );
@@ -140,9 +135,7 @@ export default function SetupGymPage() {
           </div>
 
           <div>
-            <h1 className="text-xl font-bold text-[#17211A]">
-              Gym Pilot
-            </h1>
+            <h1 className="text-xl font-bold text-[#17211A]">GymHisab</h1>
             <p className="text-xs tracking-wider text-[#829087]">
               GYM MANAGEMENT
             </p>
@@ -159,7 +152,7 @@ export default function SetupGymPage() {
           </h2>
 
           <p className="mt-3 text-sm leading-6 text-[#829087]">
-            Enter your gym name to create your Gym Pilot workspace.
+            Enter your gym name to create your GymHisab workspace.
           </p>
         </div>
 

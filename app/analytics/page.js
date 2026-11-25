@@ -555,19 +555,9 @@ export default function AnalyticsPage() {
           label={`Income vs expenses · ${periodLabel}`}
         />
 
-        <RevenueChart data={chartData} range={range} />
+       
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-          <PaymentBreakdown
-            payments={selectedPayments}
-            expenses={selectedExpenses}
-            periodLabel={periodLabel}
-          />
-          <ExpenseBreakdown
-            expenses={selectedExpenses}
-            periodLabel={periodLabel}
-          />
-        </div>
+
 
         <ExpenseManager
           gymId={gymId}
@@ -578,6 +568,19 @@ export default function AnalyticsPage() {
           onUpdated={handleExpenseUpdated}
           onDeleted={handleExpenseDeleted}
         />
+
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+          <PaymentBreakdown
+            payments={selectedPayments}
+            expenses={selectedExpenses}
+            periodLabel={periodLabel}
+          />
+          <ExpenseBreakdown
+            expenses={selectedExpenses}
+            periodLabel={periodLabel}
+          />
+        </div>
+         <RevenueChart data={chartData} range={range} />
 
         <PeriodComparison
           payments={payments}

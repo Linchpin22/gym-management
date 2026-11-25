@@ -85,8 +85,6 @@ export default function AppSidebar({ onLogout }) {
     refreshPlan();
   }
 
-
-
   useEffect(() => {
     const updateTime = () => setCurrentTime(new Date());
 
@@ -142,197 +140,179 @@ export default function AppSidebar({ onLogout }) {
     : "";
 
   // Fetch logged-in user's profile and gym
-async function openProfile() {
-  setMobileOpen(false);
-  setPlanOpen(false);
-  setProfileOpen(true);
-  setProfileLoading(true);
-  setEditing(false);
-  setProfileError("");
-  setProfileSuccess("");
-  setUser(null);
-  setGym(null);
+  async function openProfile() {
+    setMobileOpen(false);
+    setPlanOpen(false);
+    setProfileOpen(true);
+    setProfileLoading(true);
+    setEditing(false);
+    setProfileError("");
+    setProfileSuccess("");
+    setUser(null);
+    setGym(null);
 
-  try {
-    const {
-      data: { user: currentUser },
-      error: authError,
-    } = await supabase.auth.getUser();
+    try {
+      const {
+        data: { user: currentUser },
+        error: authError,
+      } = await supabase.auth.getUser();
 
-    if (authError || !currentUser) {
-      setProfileError(
-        authError?.message || "Unable to get your account.",
-      );
-      return;
-    }
+      if (authError || !currentUser) {
+        setProfileError(authError?.message || "Unable to get your account.");
+        return;
+      }
 
-    setUser(currentUser);
+      setUser(currentUser);
 
-    const { data: gymData, error: gymError } = await supabase
-      .from("gyms")
-      .select(`
+      const { data: gymData, error: gymError } = await supabase
+        .from("gyms")
+        .select(
+          `
         id,
         name,
         mobile_number,
         registration_type,
         registration_number
-      `)
-      .eq("owner_id", currentUser.id)
-      .limit(1)
-      .maybeSingle();
+      `,
+        )
+        .eq("owner_id", currentUser.id)
+        .limit(1)
+        .maybeSingle();
 
-    if (gymError) {
-      setProfileError(gymError.message);
-      return;
+      if (gymError) {
+        setProfileError(gymError.message);
+        return;
+      }
+
+      if (!gymData) {
+        setProfileError("No gym profile found for this account.");
+        return;
+      }
+
+      setGym(gymData);
+      setEditedGymName(gymData.name || "");
+      setEditedMobile(gymData.mobile_number || "");
+      setEditedRegistrationType(gymData.registration_type || "");
+      setEditedRegistrationNumber(gymData.registration_number || "");
+    } catch (err) {
+      setProfileError(err.message || "Unable to load profile.");
+    } finally {
+      setProfileLoading(false);
     }
-
-    if (!gymData) {
-      setProfileError("No gym profile found for this account.");
-      return;
-    }
-
-    setGym(gymData);
-    setEditedGymName(gymData.name || "");
-    setEditedMobile(gymData.mobile_number || "");
-    setEditedRegistrationType(gymData.registration_type || "");
-    setEditedRegistrationNumber(gymData.registration_number || "");
-  } catch (err) {
-    setProfileError(
-      err.message || "Unable to load profile.",
-    );
-  } finally {
-    setProfileLoading(false);
   }
-}
 
   // Save updated gym name
-async function handleSaveProfile(e) {
-  e.preventDefault();
+  async function handleSaveProfile(e) {
+    e.preventDefault();
 
-  if (saving) return;
+    if (saving) return;
 
-  setProfileError("");
-  setProfileSuccess("");
+    setProfileError("");
+    setProfileSuccess("");
 
-  const name = editedGymName.trim();
-  const mobile = editedMobile.trim();
-  const registrationType = editedRegistrationType;
-  const registrationNumber = editedRegistrationNumber
-    .trim()
-    .toUpperCase();
+    const name = editedGymName.trim();
+    const mobile = editedMobile.trim();
+    const registrationType = editedRegistrationType;
+    const registrationNumber = editedRegistrationNumber.trim().toUpperCase();
 
-  if (!name) {
-    setProfileError("Please enter a gym name.");
-    return;
-  }
+    if (!name) {
+      setProfileError("Please enter a gym name.");
+      return;
+    }
 
-  if (name.length > 80) {
-    setProfileError("Gym name cannot exceed 80 characters.");
-    return;
-  }
+    if (name.length > 80) {
+      setProfileError("Gym name cannot exceed 80 characters.");
+      return;
+    }
 
-  if (mobile && !/^[6-9]\d{9}$/.test(mobile)) {
-    setProfileError("Please enter a valid 10-digit mobile number.");
-    return;
-  }
+    if (mobile && !/^[6-9]\d{9}$/.test(mobile)) {
+      setProfileError("Please enter a valid 10-digit mobile number.");
+      return;
+    }
 
-  if (
-    !REGISTRATION_TYPES.some(
-      (item) => item.value === registrationType,
-    )
-  ) {
-    setProfileError("Please select a valid registration type.");
-    return;
-  }
+    if (!REGISTRATION_TYPES.some((item) => item.value === registrationType)) {
+      setProfileError("Please select a valid registration type.");
+      return;
+    }
 
-  if (registrationType && !registrationNumber) {
-    setProfileError("Please enter your registration number.");
-    return;
-  }
+    if (registrationType && !registrationNumber) {
+      setProfileError("Please enter your registration number.");
+      return;
+    }
 
-  if (
-    registrationType === "gst" &&
-    !/^\d{2}[A-Z]{5}\d{4}[A-Z][1-9A-Z]Z[0-9A-Z]$/.test(
-      registrationNumber,
-    )
-  ) {
-    setProfileError("Please enter a valid GSTIN format.");
-    return;
-  }
+    if (
+      registrationType === "gst" &&
+      !/^\d{2}[A-Z]{5}\d{4}[A-Z][1-9A-Z]Z[0-9A-Z]$/.test(registrationNumber)
+    ) {
+      setProfileError("Please enter a valid GSTIN format.");
+      return;
+    }
 
-  if (
-    registrationType === "udyam" &&
-    !/^UDYAM-[A-Z]{2}-\d{2}-\d{7}$/.test(
-      registrationNumber,
-    )
-  ) {
-    setProfileError("Please enter a valid Udyam registration format.");
-    return;
-  }
+    if (
+      registrationType === "udyam" &&
+      !/^UDYAM-[A-Z]{2}-\d{2}-\d{7}$/.test(registrationNumber)
+    ) {
+      setProfileError("Please enter a valid Udyam registration format.");
+      return;
+    }
 
-  if (registrationNumber.length > 100) {
-    setProfileError("Registration number is too long.");
-    return;
-  }
+    if (registrationNumber.length > 100) {
+      setProfileError("Registration number is too long.");
+      return;
+    }
 
-  if (!user || !gym) {
-    setProfileError("Gym profile not found.");
-    return;
-  }
+    if (!user || !gym) {
+      setProfileError("Gym profile not found.");
+      return;
+    }
 
-  setSaving(true);
+    setSaving(true);
 
-  try {
-    const { data, error } = await supabase
-      .from("gyms")
-      .update({
-        name,
-        mobile_number: mobile || null,
-        registration_type: registrationType || null,
-        registration_number: registrationType
-          ? registrationNumber
-          : null,
-      })
-      .eq("id", gym.id)
-      .eq("owner_id", user.id)
-      .select(`
+    try {
+      const { data, error } = await supabase
+        .from("gyms")
+        .update({
+          name,
+          mobile_number: mobile || null,
+          registration_type: registrationType || null,
+          registration_number: registrationType ? registrationNumber : null,
+        })
+        .eq("id", gym.id)
+        .eq("owner_id", user.id)
+        .select(
+          `
         id,
         name,
         mobile_number,
         registration_type,
         registration_number
-      `)
-      .single();
+      `,
+        )
+        .single();
 
-    if (error) {
-      setProfileError(error.message);
-      return;
+      if (error) {
+        setProfileError(error.message);
+        return;
+      }
+
+      setGym(data);
+      setEditedGymName(data.name || "");
+      setEditedMobile(data.mobile_number || "");
+
+      setEditedRegistrationType(data.registration_type || "");
+
+      setEditedRegistrationNumber(data.registration_number || "");
+
+      setEditing(false);
+      setProfileSuccess("Profile updated successfully.");
+
+      refreshPlan();
+    } catch (err) {
+      setProfileError(err.message || "Unable to update profile.");
+    } finally {
+      setSaving(false);
     }
-
-    setGym(data);
-    setEditedGymName(data.name || "");
-    setEditedMobile(data.mobile_number || "");
-
-    setEditedRegistrationType(
-      data.registration_type || "",
-    );
-
-    setEditedRegistrationNumber(
-      data.registration_number || "",
-    );
-
-    setEditing(false);
-    setProfileSuccess("Profile updated successfully.");
-
-    refreshPlan();
-  } catch (err) {
-    setProfileError(
-      err.message || "Unable to update profile.",
-    );
-  } finally {
-    setSaving(false);
   }
-}
 
   const Logo = () => (
     <div className="flex items-center gap-3">
@@ -340,7 +320,7 @@ async function handleSaveProfile(e) {
         <Dumbbell size={22} />
       </div>
       <div>
-        <h1 className="text-lg font-bold tracking-wide">Gym Pilot</h1>
+        <h1 className="text-lg font-bold tracking-wide">GymHisab</h1>
         <p className="text-[11px] text-gray-400">GYM MANAGEMENT</p>
       </div>
     </div>
@@ -450,7 +430,7 @@ async function handleSaveProfile(e) {
               </h2>
 
               <p className="mt-1 text-xs text-[#829087]">
-                View and manage your Gym Pilot plan
+                View and manage your GymHisab plan
               </p>
             </div>
           </div>
@@ -480,342 +460,267 @@ async function handleSaveProfile(e) {
         {/* Footer */}
         <div className="border-t border-[#E8EDE9] bg-[#F8FAF8] px-6 py-4">
           <p className="text-center text-xs text-[#829087]">
-            Gym Pilot · Subscription Management
+            GymHisab · Subscription Management
           </p>
         </div>
       </div>
     </div>
   );
 
-const ProfileModal = () => {
-  const inputClass =
-    "w-full rounded-xl border border-[#DCE4DE] bg-white px-4 py-3 text-sm text-[#17211A] outline-none transition focus:border-[#8BC34A] focus:ring-4 focus:ring-[#8BC34A]/10 disabled:opacity-60";
+  const ProfileModal = () => {
+    const inputClass =
+      "w-full rounded-xl border border-[#DCE4DE] bg-white px-4 py-3 text-sm text-[#17211A] outline-none transition focus:border-[#8BC34A] focus:ring-4 focus:ring-[#8BC34A]/10 disabled:opacity-60";
 
-  const labelClass =
-    "mb-2 block text-xs font-semibold uppercase tracking-wider text-[#829087]";
+    const labelClass =
+      "mb-2 block text-xs font-semibold uppercase tracking-wider text-[#829087]";
 
-  const displayClass =
-    "flex items-center gap-3 rounded-xl border border-[#E8EDE9] bg-[#F8FAF8] px-4 py-3";
+    const displayClass =
+      "flex items-center gap-3 rounded-xl border border-[#E8EDE9] bg-[#F8FAF8] px-4 py-3";
 
-  const registrationLabel =
-    REGISTRATION_TYPES.find(
-      (item) => item.value === gym?.registration_type,
-    )?.label || "Not registered";
+    const registrationLabel =
+      REGISTRATION_TYPES.find((item) => item.value === gym?.registration_type)
+        ?.label || "Not registered";
 
-  function cancelEditing() {
-    setEditedGymName(gym?.name || "");
-    setEditedMobile(gym?.mobile_number || "");
-    setEditedRegistrationType(gym?.registration_type || "");
-    setEditedRegistrationNumber(gym?.registration_number || "");
-    setEditing(false);
-    setProfileError("");
-  }
-
-  function closeProfile() {
-    if (!saving) {
-      setProfileOpen(false);
+    function cancelEditing() {
+      setEditedGymName(gym?.name || "");
+      setEditedMobile(gym?.mobile_number || "");
+      setEditedRegistrationType(gym?.registration_type || "");
+      setEditedRegistrationNumber(gym?.registration_number || "");
+      setEditing(false);
+      setProfileError("");
     }
-  }
 
-  return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 px-4 py-6 backdrop-blur-sm">
-      {/* Backdrop */}
-      <button
-        type="button"
-        aria-label="Close profile"
-        onClick={closeProfile}
-        disabled={saving}
-        className="absolute inset-0 cursor-default"
-      />
+    function closeProfile() {
+      if (!saving) {
+        setProfileOpen(false);
+      }
+    }
 
-      <div
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="profile-title"
-        className="relative z-10 flex max-h-[90vh] w-full max-w-lg flex-col overflow-hidden rounded-2xl border border-[#E8EDE9] bg-white shadow-2xl"
-      >
-        {/* Header */}
-        <div className="flex shrink-0 items-center justify-between border-b border-[#E8EDE9] px-6 py-5">
-          <div>
-            <h2
-              id="profile-title"
-              className="text-lg font-bold text-[#17211A]"
-            >
-              My Profile
-            </h2>
+    return (
+      <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 px-4 py-6 backdrop-blur-sm">
+        {/* Backdrop */}
+        <button
+          type="button"
+          aria-label="Close profile"
+          onClick={closeProfile}
+          disabled={saving}
+          className="absolute inset-0 cursor-default"
+        />
 
-            <p className="mt-1 text-xs text-[#829087]">
-              Manage your gym and business information
-            </p>
-          </div>
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="profile-title"
+          className="relative z-10 flex max-h-[90vh] w-full max-w-lg flex-col overflow-hidden rounded-2xl border border-[#E8EDE9] bg-white shadow-2xl"
+        >
+          {/* Header */}
+          <div className="flex shrink-0 items-center justify-between border-b border-[#E8EDE9] px-6 py-5">
+            <div>
+              <h2
+                id="profile-title"
+                className="text-lg font-bold text-[#17211A]"
+              >
+                My Profile
+              </h2>
 
-          <button
-            type="button"
-            onClick={closeProfile}
-            disabled={saving}
-            aria-label="Close"
-            className="flex h-9 w-9 cursor-pointer items-center justify-center rounded-lg text-[#829087] transition hover:bg-gray-100 hover:text-[#17211A] disabled:opacity-50"
-          >
-            <X size={19} />
-          </button>
-        </div>
-
-        {/* Body */}
-        <div className="min-h-0 flex-1 overflow-y-auto p-5 sm:p-6">
-          {profileLoading ? (
-            <div className="flex flex-col items-center justify-center py-12">
-              <LoaderCircle
-                size={30}
-                className="animate-spin text-[#8BC34A]"
-              />
-
-              <p className="mt-3 text-sm text-[#829087]">
-                Loading profile...
+              <p className="mt-1 text-xs text-[#829087]">
+                Manage your gym and business information
               </p>
             </div>
-          ) : (
-            <form
-              id="gym-profile-form"
-              onSubmit={handleSaveProfile}
-              className="space-y-5"
+
+            <button
+              type="button"
+              onClick={closeProfile}
+              disabled={saving}
+              aria-label="Close"
+              className="flex h-9 w-9 cursor-pointer items-center justify-center rounded-lg text-[#829087] transition hover:bg-gray-100 hover:text-[#17211A] disabled:opacity-50"
             >
-              {/* Profile identity */}
-              <div className="flex items-center gap-4">
-                <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-[#EAF3E2] text-[#668D43]">
-                  <Dumbbell size={27} />
-                </div>
+              <X size={19} />
+            </button>
+          </div>
 
-                <div className="min-w-0 flex-1">
-                  <h3 className="truncate text-base font-bold text-[#17211A]">
-                    {gym?.name || "Gym Profile"}
-                  </h3>
+          {/* Body */}
+          <div className="min-h-0 flex-1 overflow-y-auto p-5 sm:p-6">
+            {profileLoading ? (
+              <div className="flex flex-col items-center justify-center py-12">
+                <LoaderCircle
+                  size={30}
+                  className="animate-spin text-[#8BC34A]"
+                />
 
-                  <p className="mt-1 truncate text-sm text-[#829087]">
-                    {user?.email}
-                  </p>
-                </div>
-
-                {!editing && gym && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setEditing(true);
-                      setProfileError("");
-                      setProfileSuccess("");
-                    }}
-                    className="flex shrink-0 cursor-pointer items-center gap-2 rounded-lg bg-[#EAF3E2] px-3 py-2 text-xs font-semibold text-[#668D43] transition hover:bg-[#DDEBCF]"
-                  >
-                    <Pencil size={14} />
-                    Edit Profile
-                  </button>
-                )}
+                <p className="mt-3 text-sm text-[#829087]">
+                  Loading profile...
+                </p>
               </div>
-
-              {/* Gym information */}
-              <div className="space-y-4">
-                <h3 className="border-b border-[#E8EDE9] pb-2 text-xs font-bold uppercase tracking-wider text-[#668D43]">
-                  Gym Information
-                </h3>
-
-                {/* Gym Name */}
-                <div>
-                  <label
-                    htmlFor="profileGymName"
-                    className={labelClass}
-                  >
-                    Gym Name
-                  </label>
-
-                  {editing ? (
-                    <input
-                      id="profileGymName"
-                      type="text"
-                      value={editedGymName}
-                      onChange={(e) =>
-                        setEditedGymName(e.target.value)
-                      }
-                      maxLength={80}
-                      required
-                      autoFocus
-                      disabled={saving}
-                      placeholder="Enter gym name"
-                      className={inputClass}
-                    />
-                  ) : (
-                    <div className={displayClass}>
-                      <Building2
-                        size={18}
-                        className="shrink-0 text-[#829087]"
-                      />
-
-                      <span className="truncate text-sm font-semibold text-[#17211A]">
-                        {gym?.name || "Not available"}
-                      </span>
-                    </div>
-                  )}
-                </div>
-
-                {/* Mobile Number */}
-                <div>
-                  <label
-                    htmlFor="profileMobile"
-                    className={labelClass}
-                  >
-                    Mobile Number
-                  </label>
-
-                  {editing ? (
-                    <div className="flex gap-2">
-                      <div className="flex shrink-0 items-center rounded-xl border border-[#DCE4DE] bg-[#F8FAF8] px-3 text-sm font-semibold text-[#526157]">
-                        +91
-                      </div>
-
-                      <input
-                        id="profileMobile"
-                        type="tel"
-                        inputMode="numeric"
-                        value={editedMobile}
-                        onChange={(e) =>
-                          setEditedMobile(
-                            e.target.value
-                              .replace(/\D/g, "")
-                              .slice(0, 10),
-                          )
-                        }
-                        maxLength={10}
-                        disabled={saving}
-                        placeholder="Enter mobile number"
-                        className={inputClass}
-                      />
-                    </div>
-                  ) : (
-                    <div className={displayClass}>
-                      <Phone
-                        size={18}
-                        className="shrink-0 text-[#829087]"
-                      />
-
-                      <span className="text-sm font-semibold text-[#17211A]">
-                        {gym?.mobile_number
-                          ? `+91 ${gym.mobile_number}`
-                          : "Not provided"}
-                      </span>
-                    </div>
-                  )}
-                </div>
-
-                {/* Registered Email */}
-                <div>
-                  <label className={labelClass}>
-                    Registered Email
-                  </label>
-
-                  <div className={displayClass}>
-                    <Mail
-                      size={18}
-                      className="shrink-0 text-[#829087]"
-                    />
-
-                    <span className="truncate text-sm text-[#526157]">
-                      {user?.email || "Not available"}
-                    </span>
+            ) : (
+              <form
+                id="gym-profile-form"
+                onSubmit={handleSaveProfile}
+                className="space-y-5"
+              >
+                {/* Profile identity */}
+                <div className="flex items-center gap-4">
+                  <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-[#EAF3E2] text-[#668D43]">
+                    <Dumbbell size={27} />
                   </div>
 
-                  <p className="mt-2 text-xs text-[#829087]">
-                    Your registered email cannot be changed here.
-                  </p>
-                </div>
-              </div>
+                  <div className="min-w-0 flex-1">
+                    <h3 className="truncate text-base font-bold text-[#17211A]">
+                      {gym?.name || "Gym Profile"}
+                    </h3>
 
-              {/* Business Registration */}
-              <div className="space-y-4">
-                <div className="flex items-center justify-between border-b border-[#E8EDE9] pb-2">
-                  <h3 className="text-xs font-bold uppercase tracking-wider text-[#668D43]">
-                    Business Registration
-                  </h3>
+                    <p className="mt-1 truncate text-sm text-[#829087]">
+                      {user?.email}
+                    </p>
+                  </div>
 
-                  <span className="text-xs text-[#829087]">
-                    Optional
-                  </span>
-                </div>
-
-                {/* Registration Type */}
-                <div>
-                  <label
-                    htmlFor="registrationType"
-                    className={labelClass}
-                  >
-                    Registration Type
-                  </label>
-
-                  {editing ? (
-                    <select
-                      id="registrationType"
-                      value={editedRegistrationType}
-                      onChange={(e) => {
-                        setEditedRegistrationType(e.target.value);
-                        setEditedRegistrationNumber("");
+                  {!editing && gym && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setEditing(true);
+                        setProfileError("");
+                        setProfileSuccess("");
                       }}
-                      disabled={saving}
-                      className={inputClass}
+                      className="flex shrink-0 cursor-pointer items-center gap-2 rounded-lg bg-[#EAF3E2] px-3 py-2 text-xs font-semibold text-[#668D43] transition hover:bg-[#DDEBCF]"
                     >
-                      {REGISTRATION_TYPES.map((item) => (
-                        <option
-                          key={item.value}
-                          value={item.value}
-                        >
-                          {item.label}
-                        </option>
-                      ))}
-                    </select>
-                  ) : (
-                    <div className={displayClass}>
-                      <FileText
-                        size={18}
-                        className="shrink-0 text-[#829087]"
-                      />
-
-                      <span className="text-sm font-semibold text-[#17211A]">
-                        {registrationLabel}
-                      </span>
-                    </div>
+                      <Pencil size={14} />
+                      Edit Profile
+                    </button>
                   )}
                 </div>
 
-                {/* Registration Number */}
-                {(editing
-                  ? editedRegistrationType
-                  : gym?.registration_type) && (
+                {/* Gym information */}
+                <div className="space-y-4">
+                  <h3 className="border-b border-[#E8EDE9] pb-2 text-xs font-bold uppercase tracking-wider text-[#668D43]">
+                    Gym Information
+                  </h3>
+
+                  {/* Gym Name */}
                   <div>
-                    <label
-                      htmlFor="registrationNumber"
-                      className={labelClass}
-                    >
-                      Registration Number
+                    <label htmlFor="profileGymName" className={labelClass}>
+                      Gym Name
                     </label>
 
                     {editing ? (
                       <input
-                        id="registrationNumber"
+                        id="profileGymName"
                         type="text"
-                        value={editedRegistrationNumber}
-                        onChange={(e) =>
-                          setEditedRegistrationNumber(
-                            e.target.value.toUpperCase(),
-                          )
-                        }
-                        maxLength={100}
+                        value={editedGymName}
+                        onChange={(e) => setEditedGymName(e.target.value)}
+                        maxLength={80}
                         required
+                        autoFocus
                         disabled={saving}
-                        placeholder={
-                          editedRegistrationType === "gst"
-                            ? "Enter GSTIN"
-                            : editedRegistrationType === "udyam"
-                              ? "UDYAM-XX-00-0000000"
-                              : "Enter registration number"
-                        }
+                        placeholder="Enter gym name"
                         className={inputClass}
                       />
+                    ) : (
+                      <div className={displayClass}>
+                        <Building2
+                          size={18}
+                          className="shrink-0 text-[#829087]"
+                        />
+
+                        <span className="truncate text-sm font-semibold text-[#17211A]">
+                          {gym?.name || "Not available"}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Mobile Number */}
+                  <div>
+                    <label htmlFor="profileMobile" className={labelClass}>
+                      Mobile Number
+                    </label>
+
+                    {editing ? (
+                      <div className="flex gap-2">
+                        <div className="flex shrink-0 items-center rounded-xl border border-[#DCE4DE] bg-[#F8FAF8] px-3 text-sm font-semibold text-[#526157]">
+                          +91
+                        </div>
+
+                        <input
+                          id="profileMobile"
+                          type="tel"
+                          inputMode="numeric"
+                          value={editedMobile}
+                          onChange={(e) =>
+                            setEditedMobile(
+                              e.target.value.replace(/\D/g, "").slice(0, 10),
+                            )
+                          }
+                          maxLength={10}
+                          disabled={saving}
+                          placeholder="Enter mobile number"
+                          className={inputClass}
+                        />
+                      </div>
+                    ) : (
+                      <div className={displayClass}>
+                        <Phone size={18} className="shrink-0 text-[#829087]" />
+
+                        <span className="text-sm font-semibold text-[#17211A]">
+                          {gym?.mobile_number
+                            ? `+91 ${gym.mobile_number}`
+                            : "Not provided"}
+                        </span>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Registered Email */}
+                  <div>
+                    <label className={labelClass}>Registered Email</label>
+
+                    <div className={displayClass}>
+                      <Mail size={18} className="shrink-0 text-[#829087]" />
+
+                      <span className="truncate text-sm text-[#526157]">
+                        {user?.email || "Not available"}
+                      </span>
+                    </div>
+
+                    <p className="mt-2 text-xs text-[#829087]">
+                      Your registered email cannot be changed here.
+                    </p>
+                  </div>
+                </div>
+
+                {/* Business Registration */}
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between border-b border-[#E8EDE9] pb-2">
+                    <h3 className="text-xs font-bold uppercase tracking-wider text-[#668D43]">
+                      Business Registration
+                    </h3>
+
+                    <span className="text-xs text-[#829087]">Optional</span>
+                  </div>
+
+                  {/* Registration Type */}
+                  <div>
+                    <label htmlFor="registrationType" className={labelClass}>
+                      Registration Type
+                    </label>
+
+                    {editing ? (
+                      <select
+                        id="registrationType"
+                        value={editedRegistrationType}
+                        onChange={(e) => {
+                          setEditedRegistrationType(e.target.value);
+                          setEditedRegistrationNumber("");
+                        }}
+                        disabled={saving}
+                        className={inputClass}
+                      >
+                        {REGISTRATION_TYPES.map((item) => (
+                          <option key={item.value} value={item.value}>
+                            {item.label}
+                          </option>
+                        ))}
+                      </select>
                     ) : (
                       <div className={displayClass}>
                         <FileText
@@ -823,103 +728,141 @@ const ProfileModal = () => {
                           className="shrink-0 text-[#829087]"
                         />
 
-                        <span className="break-all text-sm font-semibold text-[#17211A]">
-                          {gym?.registration_number ||
-                            "Not provided"}
+                        <span className="text-sm font-semibold text-[#17211A]">
+                          {registrationLabel}
                         </span>
                       </div>
                     )}
                   </div>
+
+                  {/* Registration Number */}
+                  {(editing
+                    ? editedRegistrationType
+                    : gym?.registration_type) && (
+                    <div>
+                      <label
+                        htmlFor="registrationNumber"
+                        className={labelClass}
+                      >
+                        Registration Number
+                      </label>
+
+                      {editing ? (
+                        <input
+                          id="registrationNumber"
+                          type="text"
+                          value={editedRegistrationNumber}
+                          onChange={(e) =>
+                            setEditedRegistrationNumber(
+                              e.target.value.toUpperCase(),
+                            )
+                          }
+                          maxLength={100}
+                          required
+                          disabled={saving}
+                          placeholder={
+                            editedRegistrationType === "gst"
+                              ? "Enter GSTIN"
+                              : editedRegistrationType === "udyam"
+                                ? "UDYAM-XX-00-0000000"
+                                : "Enter registration number"
+                          }
+                          className={inputClass}
+                        />
+                      ) : (
+                        <div className={displayClass}>
+                          <FileText
+                            size={18}
+                            className="shrink-0 text-[#829087]"
+                          />
+
+                          <span className="break-all text-sm font-semibold text-[#17211A]">
+                            {gym?.registration_number || "Not provided"}
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  <div className="flex items-start gap-2 rounded-xl border border-[#E4EED9] bg-[#F3F8ED] p-3">
+                    <AlertCircle
+                      size={16}
+                      className="mt-0.5 shrink-0 text-[#668D43]"
+                    />
+
+                    <p className="text-xs leading-relaxed text-[#668D43]">
+                      Business registration details are optional. You can
+                      provide your GSTIN, MSME or other government-issued
+                      business registration number.
+                    </p>
+                  </div>
+                </div>
+
+                {/* Error */}
+                {profileError && (
+                  <div
+                    role="alert"
+                    className="flex items-start gap-2 rounded-xl border border-red-100 bg-red-50 p-3 text-sm text-red-600"
+                  >
+                    <AlertCircle size={17} className="mt-0.5 shrink-0" />
+
+                    <span>{profileError}</span>
+                  </div>
                 )}
 
-                <div className="flex items-start gap-2 rounded-xl border border-[#E4EED9] bg-[#F3F8ED] p-3">
-                  <AlertCircle
-                    size={16}
-                    className="mt-0.5 shrink-0 text-[#668D43]"
-                  />
+                {/* Success */}
+                {profileSuccess && (
+                  <div
+                    role="status"
+                    className="flex items-start gap-2 rounded-xl border border-[#8BC34A]/30 bg-[#8BC34A]/10 p-3 text-sm text-[#537D2D]"
+                  >
+                    <CheckCircle2 size={17} className="mt-0.5 shrink-0" />
 
-                  <p className="text-xs leading-relaxed text-[#668D43]">
-                    Business registration details are optional.
-                    You can provide your GSTIN, MSME or other
-                    government-issued business registration number.
-                  </p>
-                </div>
+                    <span>{profileSuccess}</span>
+                  </div>
+                )}
+              </form>
+            )}
+          </div>
+
+          {/* Footer */}
+          <div className="shrink-0 border-t border-[#E8EDE9] bg-[#F8FAF8] px-5 py-4 sm:px-6">
+            {editing && !profileLoading ? (
+              <div className="flex gap-3">
+                <button
+                  type="button"
+                  onClick={cancelEditing}
+                  disabled={saving}
+                  className="flex-1 cursor-pointer rounded-xl border border-[#DCE4DE] bg-white px-4 py-3 text-sm font-semibold text-[#526157] transition hover:bg-gray-50 disabled:opacity-50"
+                >
+                  Cancel
+                </button>
+
+                <button
+                  type="submit"
+                  form="gym-profile-form"
+                  disabled={saving || !editedGymName.trim()}
+                  className="flex flex-1 cursor-pointer items-center justify-center gap-2 rounded-xl bg-[#8BC34A] px-4 py-3 text-sm font-bold text-[#17211A] transition hover:bg-[#7FB53E] disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {saving ? (
+                    <LoaderCircle size={17} className="animate-spin" />
+                  ) : (
+                    <Save size={17} />
+                  )}
+
+                  {saving ? "Saving..." : "Save Changes"}
+                </button>
               </div>
-
-              {/* Error */}
-              {profileError && (
-                <div
-                  role="alert"
-                  className="flex items-start gap-2 rounded-xl border border-red-100 bg-red-50 p-3 text-sm text-red-600"
-                >
-                  <AlertCircle
-                    size={17}
-                    className="mt-0.5 shrink-0"
-                  />
-
-                  <span>{profileError}</span>
-                </div>
-              )}
-
-              {/* Success */}
-              {profileSuccess && (
-                <div
-                  role="status"
-                  className="flex items-start gap-2 rounded-xl border border-[#8BC34A]/30 bg-[#8BC34A]/10 p-3 text-sm text-[#537D2D]"
-                >
-                  <CheckCircle2
-                    size={17}
-                    className="mt-0.5 shrink-0"
-                  />
-
-                  <span>{profileSuccess}</span>
-                </div>
-              )}
-            </form>
-          )}
-        </div>
-
-        {/* Footer */}
-        <div className="shrink-0 border-t border-[#E8EDE9] bg-[#F8FAF8] px-5 py-4 sm:px-6">
-          {editing && !profileLoading ? (
-            <div className="flex gap-3">
-              <button
-                type="button"
-                onClick={cancelEditing}
-                disabled={saving}
-                className="flex-1 cursor-pointer rounded-xl border border-[#DCE4DE] bg-white px-4 py-3 text-sm font-semibold text-[#526157] transition hover:bg-gray-50 disabled:opacity-50"
-              >
-                Cancel
-              </button>
-
-              <button
-                type="submit"
-                form="gym-profile-form"
-                disabled={saving || !editedGymName.trim()}
-                className="flex flex-1 cursor-pointer items-center justify-center gap-2 rounded-xl bg-[#8BC34A] px-4 py-3 text-sm font-bold text-[#17211A] transition hover:bg-[#7FB53E] disabled:cursor-not-allowed disabled:opacity-60"
-              >
-                {saving ? (
-                  <LoaderCircle
-                    size={17}
-                    className="animate-spin"
-                  />
-                ) : (
-                  <Save size={17} />
-                )}
-
-                {saving ? "Saving..." : "Save Changes"}
-              </button>
-            </div>
-          ) : (
-            <p className="text-center text-xs text-[#829087]">
-              Gym Pilot · Gym Management
-            </p>
-          )}
+            ) : (
+              <p className="text-center text-xs text-[#829087]">
+                GymHisab · Gym Management
+              </p>
+            )}
+          </div>
         </div>
       </div>
-    </div>
-  );
-};
+    );
+  };
 
   return (
     <>
