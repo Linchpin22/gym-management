@@ -67,7 +67,7 @@ function safeFileName(text) {
   );
 }
 
-export async function downloadReceipt({
+export async function generateReceipt({
   gymName,
   gymMobile,
   registrationType,
@@ -461,15 +461,55 @@ export async function downloadReceipt({
   doc.setFillColor(...COLORS.green);
   doc.rect(0, H - 2, W, 2, "F");
 
-  // ==========================================
-  // DOWNLOAD
+    // ==========================================
+  // RETURN GENERATED PDF
   // ==========================================
 
   const stamp =
     String(paidOn || "").slice(0, 10) ||
     new Date().toISOString().slice(0, 10);
 
-  doc.save(
-    `Receipt-${safeFileName(memberName)}-${stamp}.pdf`,
+  const fileName =
+    `Receipt-${safeFileName(memberName)}-${stamp}.pdf`;
+
+  return { doc, fileName };
+}
+
+// ==========================================
+// DOWNLOAD RECEIPT
+// ==========================================
+
+export async function downloadReceipt(data) {
+  const { doc, fileName } = await generateReceipt(data);
+
+  doc.save(fileName);
+}
+
+// ==========================================
+// SHARE PDF RECEIPT
+// ==========================================
+
+export async function shareReceipt(data) {
+  const { doc, fileName } = await generateReceipt(data);
+
+  const file = new File(
+    [doc.output("blob")],
+    fileName,
+    {
+      type: "application/pdf",
+    },
   );
+
+  if (
+    typeof navigator.share !== "function" ||
+    !navigator.canShare?.({ files: [file] })
+  ) {
+    throw new Error(
+      "PDF sharing is not supported on this browser or device."
+    );
+  }
+
+  await navigator.share({
+    files: [file],
+  });
 }
