@@ -33,11 +33,18 @@ function toExcelDate(str) {
 
 function modeLabel(mode) {
   if (!mode) return "";
-  return mode.toLowerCase() === "upi" ? "UPI" : mode.charAt(0).toUpperCase() + mode.slice(1);
+  return mode.toLowerCase() === "upi"
+    ? "UPI"
+    : mode.charAt(0).toUpperCase() + mode.slice(1);
 }
 
 function safeFileName(text) {
-  return String(text || "gym").replace(/[^\w\- ]+/g, "").trim().replace(/\s+/g, "-") || "gym";
+  return (
+    String(text || "gym")
+      .replace(/[^\w\- ]+/g, "")
+      .trim()
+      .replace(/\s+/g, "-") || "gym"
+  );
 }
 
 const DATE_FMT = "dd-mmm-yyyy";
@@ -49,27 +56,38 @@ function styleHeader(sheet) {
   row.alignment = { vertical: "middle" };
   row.height = 22;
   row.eachCell((cell) => {
-    cell.fill = { type: "pattern", pattern: "solid", fgColor: { argb: "FF17211A" } };
+    cell.fill = {
+      type: "pattern",
+      pattern: "solid",
+      fgColor: { argb: "FF17211A" },
+    };
   });
   sheet.views = [{ state: "frozen", ySplit: 1 }];
-  sheet.autoFilter = { from: { row: 1, column: 1 }, to: { row: 1, column: sheet.columnCount } };
+  sheet.autoFilter = {
+    from: { row: 1, column: 1 },
+    to: { row: 1, column: sheet.columnCount },
+  };
 }
 
 export async function exportMembersToExcel({ gym, members, plans = [] }) {
   const ExcelJS = (await import("exceljs")).default; // loaded only when the button is clicked
 
   const payments = await fetchAllPayments(gym.id);
-  const planName = (id) => plans.find((p) => String(p.id) === String(id))?.name || "";
+  const planName = (id) =>
+    plans.find((p) => String(p.id) === String(id))?.name || "";
   const memberById = new Map(members.map((m) => [m.id, m]));
 
   // payments are newest first, so the first one found for a member is the latest
   const totals = new Map();
   for (const p of payments) {
-    totals.set(p.member_id, (totals.get(p.member_id) || 0) + Number(p.amount || 0));
+    totals.set(
+      p.member_id,
+      (totals.get(p.member_id) || 0) + Number(p.amount || 0),
+    );
   }
 
   const wb = new ExcelJS.Workbook();
-  wb.creator = "Gym Pilot";
+  wb.creator = "GymHisab";
   wb.created = new Date();
 
   // ---- Members sheet
@@ -78,14 +96,39 @@ export async function exportMembersToExcel({ gym, members, plans = [] }) {
     { header: "Name", key: "name", width: 24 },
     { header: "Phone", key: "phone", width: 14 },
     { header: "Plan", key: "plan", width: 18 },
-    { header: "Join date", key: "join", width: 14, style: { numFmt: DATE_FMT } },
-    { header: "Expiry date", key: "expiry", width: 14, style: { numFmt: DATE_FMT } },
+    {
+      header: "Join date",
+      key: "join",
+      width: 14,
+      style: { numFmt: DATE_FMT },
+    },
+    {
+      header: "Expiry date",
+      key: "expiry",
+      width: 14,
+      style: { numFmt: DATE_FMT },
+    },
     { header: "Status", key: "status", width: 11 },
     { header: "Days left", key: "left", width: 10 },
-    { header: "Last payment (₹)", key: "lastAmt", width: 16, style: { numFmt: MONEY_FMT } },
-    { header: "Last payment date", key: "lastDate", width: 17, style: { numFmt: DATE_FMT } },
+    {
+      header: "Last payment (₹)",
+      key: "lastAmt",
+      width: 16,
+      style: { numFmt: MONEY_FMT },
+    },
+    {
+      header: "Last payment date",
+      key: "lastDate",
+      width: 17,
+      style: { numFmt: DATE_FMT },
+    },
     { header: "Last payment mode", key: "lastMode", width: 17 },
-    { header: "Total paid (₹)", key: "total", width: 15, style: { numFmt: MONEY_FMT } },
+    {
+      header: "Total paid (₹)",
+      key: "total",
+      width: 15,
+      style: { numFmt: MONEY_FMT },
+    },
   ];
 
   for (const m of members) {
@@ -114,7 +157,12 @@ export async function exportMembersToExcel({ gym, members, plans = [] }) {
     { header: "Member", key: "name", width: 24 },
     { header: "Phone", key: "phone", width: 14 },
     { header: "Plan", key: "plan", width: 18 },
-    { header: "Amount (₹)", key: "amount", width: 14, style: { numFmt: MONEY_FMT } },
+    {
+      header: "Amount (₹)",
+      key: "amount",
+      width: 14,
+      style: { numFmt: MONEY_FMT },
+    },
     { header: "Mode", key: "mode", width: 12 },
   ];
 

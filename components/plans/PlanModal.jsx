@@ -41,7 +41,7 @@ export default function PlanModal({
               <p className="mt-1 text-sm text-white/60">
                 {editingPlan
                   ? "Update your membership details."
-                  : "Add a new membership option to Gym Pilot."}
+                  : "Add a new membership option to GymHisab."}
               </p>
             </div>
 

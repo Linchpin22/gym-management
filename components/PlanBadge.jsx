@@ -20,14 +20,14 @@ export default function PlanBadge({ gym, onClick }) {
 
   const content = (
     <>
-      <Sparkles size={14} aria-hidden="true" />
-      {planName && <span className="hidden sm:inline">{planName}</span>}
+      <Sparkles size={14} className="text-[#8BC34A]" aria-hidden="true" />
+      {planName && <span className="hidden text-[#8BC34A] sm:inline">{planName}</span>}
       {planName && (
-        <span className="hidden opacity-50 sm:inline" aria-hidden="true">
+        <span className="hidden text-[#8BC34A] opacity-50 sm:inline" aria-hidden="true">
           ·
         </span>
       )}
-      <span>{st.text}</span>
+      <span className="text-[#8BC34A]">{st.text}</span>
     </>
   );
 

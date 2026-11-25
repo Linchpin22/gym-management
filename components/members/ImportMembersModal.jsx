@@ -114,7 +114,7 @@ function downloadTemplate() {
   const workbook = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(workbook, worksheet, "Members");
 
-  XLSX.writeFile(workbook, "gym-pilot-members-template.xlsx");
+  XLSX.writeFile(workbook, "gym-hisab-members-template.xlsx");
 }
 
 function validateRows(rawRows, plans, existingMembers) {

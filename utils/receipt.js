@@ -1,3 +1,4 @@
+
 const REGISTRATION_LABELS = {
   gst: "GSTIN",
   udyam: "MSME / Udyam",
@@ -10,12 +11,16 @@ const COLORS = {
   primary: [23, 33, 26],
   green: [139, 195, 74],
   darkGreen: [82, 119, 45],
-  muted: [130, 144, 135],
+  muted: [110, 125, 115],
   border: [220, 228, 222],
   light: [248, 250, 248],
   lightGreen: [234, 243, 226],
   white: [255, 255, 255],
 };
+
+// ==========================================
+// HELPERS
+// ==========================================
 
 function fmtDate(str) {
   if (!str) return "-";
@@ -25,7 +30,11 @@ function fmtDate(str) {
     .split("-")
     .map(Number);
 
-  return new Date(y, m - 1, d).toLocaleDateString("en-IN", {
+  const date = new Date(y, m - 1, d);
+
+  if (Number.isNaN(date.getTime())) return "-";
+
+  return date.toLocaleDateString("en-IN", {
     day: "numeric",
     month: "short",
     year: "numeric",
@@ -51,11 +60,22 @@ function fmtMobile(mobile) {
 function fmtMode(mode) {
   if (!mode) return "-";
 
-  const value = String(mode).toLowerCase();
+  const value = String(mode).trim().toLowerCase();
 
-  if (value === "upi") return "UPI";
+  const modes = {
+    upi: "UPI",
+    cash: "Cash",
+    card: "Card",
+    bank_transfer: "Bank Transfer",
+    "bank transfer": "Bank Transfer",
+    cheque: "Cheque",
+    online: "Online",
+  };
 
-  return value.charAt(0).toUpperCase() + value.slice(1);
+  return (
+    modes[value] ||
+    value.charAt(0).toUpperCase() + value.slice(1)
+  );
 }
 
 function safeFileName(text) {
@@ -66,6 +86,25 @@ function safeFileName(text) {
       .replace(/\s+/g, "-") || "member"
   );
 }
+
+function fmtAmount(amount) {
+  const value = Number(amount ?? 0);
+
+  return (
+    "Rs. " +
+    (Number.isFinite(value) ? value : 0).toLocaleString(
+      "en-IN",
+      {
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
+      }
+    )
+  );
+}
+
+// ==========================================
+// GENERATE RECEIPT
+// ==========================================
 
 export async function generateReceipt({
   gymName,
@@ -87,382 +126,556 @@ export async function generateReceipt({
   const M = 8;
   const inner = W - M * 2;
 
-  const money =
-    "Rs. " +
-    Number(amount || 0).toLocaleString("en-IN", {
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2,
-    });
+  const money = fmtAmount(amount);
 
   const registrationLabel =
-    REGISTRATION_LABELS[registrationType] || "Registration No.";
+    REGISTRATION_LABELS[
+      String(registrationType || "").toLowerCase()
+    ] || "Registration No.";
 
   const registrationText = registrationNumber
     ? `${registrationLabel}: ${registrationNumber}`
     : "";
 
-  // Measure content before creating the final PDF.
-  const measure = new jsPDF({ unit: "mm" });
+  // ==========================================
+  // RENDER RECEIPT
+  // ==========================================
 
-  measure.setFont("helvetica", "bold");
-  measure.setFontSize(17);
+  function renderReceipt(doc) {
+    let y = 0;
 
-  const gymLines = measure.splitTextToSize(
-    String(gymName || "Gym"),
-    inner,
-  );
+    function setText(size, color, weight = "normal") {
+      doc.setFont("helvetica", weight);
+      doc.setFontSize(size);
+      doc.setTextColor(...color);
+    }
 
-  measure.setFont("helvetica", "normal");
-  measure.setFontSize(8);
+    function divider(position) {
+      doc.setDrawColor(...COLORS.border);
+      doc.setLineWidth(0.25);
+      doc.line(M, position, W - M, position);
+    }
 
-  const registrationLines = registrationText
-    ? measure.splitTextToSize(registrationText, inner)
-    : [];
+    function getLines(value, width = inner) {
+      return doc.splitTextToSize(
+        String(value ?? "-"),
+        width
+      );
+    }
 
-  measure.setFont("helvetica", "bold");
-  measure.setFontSize(13);
+    function drawLines(
+      lines,
+      x,
+      startY,
+      lineHeight,
+      align = "left"
+    ) {
+      let currentY = startY;
 
-  const memberLines = measure.splitTextToSize(
-    String(memberName || "-"),
-    inner - 8,
-  );
+      lines.forEach((line) => {
+        doc.text(String(line), x, currentY, {
+          align,
+        });
 
-  measure.setFontSize(10);
+        currentY += lineHeight;
+      });
 
-  const planLines = measure.splitTextToSize(
-    String(planName || "-"),
-    inner - 8,
-  );
+      return currentY;
+    }
 
-  measure.setFontSize(8);
+    // ==========================================
+    // HEADER MEASUREMENT
+    // ==========================================
 
-  const referenceLines = paymentId
-    ? measure.splitTextToSize(String(paymentId), inner)
-    : [];
+    setText(17, COLORS.white, "bold");
 
-  // Dynamic receipt height.
-  const headerHeight =
-    19 +
-    gymLines.length * 7 +
-    (gymMobile ? 5 : 0) +
-    registrationLines.length * 4;
+    const gymLines = getLines(gymName || "Gym");
 
-  const memberHeight =
-    14 +
-    memberLines.length * 5.5 +
-    (memberMobile ? 5 : 0);
+    setText(8.5, COLORS.border);
 
-  const paymentHeight = 46 + planLines.length * 5;
+    const gymMobileLines = gymMobile
+      ? getLines(`Mobile: ${fmtMobile(gymMobile)}`)
+      : [];
 
-  const referenceHeight = paymentId
-    ? 7 + referenceLines.length * 4
-    : 0;
+    setText(8, COLORS.border);
 
-  const H =
-    headerHeight +
-    memberHeight +
-    paymentHeight +
-    referenceHeight +
-    86;
+    const registrationLines = registrationText
+      ? getLines(registrationText)
+      : [];
+
+    const headerHeight =
+      12 +
+      gymLines.length * 7 +
+      gymMobileLines.length * 4.5 +
+      registrationLines.length * 4;
+
+    // ==========================================
+    // HEADER BACKGROUND
+    // ==========================================
+
+    doc.setFillColor(...COLORS.primary);
+    doc.rect(0, 0, W, headerHeight, "F");
+
+    doc.setFillColor(...COLORS.green);
+    doc.rect(0, 0, W, 2, "F");
+
+    y = 10;
+
+    // Gym name
+    setText(17, COLORS.white, "bold");
+
+    y = drawLines(
+      gymLines,
+      W / 2,
+      y,
+      7,
+      "center"
+    );
+
+    // Gym mobile
+    if (gymMobileLines.length) {
+      setText(8.5, COLORS.border);
+
+      y = drawLines(
+        gymMobileLines,
+        W / 2,
+        y,
+        4.5,
+        "center"
+      );
+    }
+
+    // Government registration
+    if (registrationLines.length) {
+      setText(8, COLORS.border);
+
+      y = drawLines(
+        registrationLines,
+        W / 2,
+        y,
+        4,
+        "center"
+      );
+    }
+
+    // ==========================================
+    // RECEIPT TITLE
+    // ==========================================
+
+    y = headerHeight + 9;
+
+    setText(15, COLORS.primary, "bold");
+
+    doc.text("PAYMENT RECEIPT", W / 2, y, {
+      align: "center",
+    });
+
+    y += 5;
+
+    setText(8, COLORS.muted);
+
+    doc.text(
+      "Membership fee acknowledgement",
+      W / 2,
+      y,
+      {
+        align: "center",
+      }
+    );
+
+    y += 5;
+
+    divider(y);
+
+    y += 6;
+
+    // ==========================================
+    // MEMBER INFORMATION
+    // ==========================================
+
+    setText(13, COLORS.primary, "bold");
+
+    const memberLines = getLines(
+      memberName || "-",
+      inner - 8
+    );
+
+    setText(9, COLORS.muted);
+
+    const memberMobileLines = memberMobile
+      ? getLines(
+          fmtMobile(memberMobile),
+          inner - 8
+        )
+      : [];
+
+    const memberHeight =
+      12 +
+      memberLines.length * 5.5 +
+      memberMobileLines.length * 4.5;
+
+    doc.setFillColor(...COLORS.light);
+
+    doc.roundedRect(
+      M,
+      y,
+      inner,
+      memberHeight,
+      3,
+      3,
+      "F"
+    );
+
+    let memberY = y + 6;
+
+    setText(7.5, COLORS.muted, "bold");
+
+    doc.text(
+      "RECEIVED FROM",
+      M + 4,
+      memberY
+    );
+
+    memberY += 6;
+
+    setText(13, COLORS.primary, "bold");
+
+    memberY = drawLines(
+      memberLines,
+      M + 4,
+      memberY,
+      5.5
+    );
+
+    if (memberMobileLines.length) {
+      setText(9, COLORS.muted);
+
+      drawLines(
+        memberMobileLines,
+        M + 4,
+        memberY,
+        4.5
+      );
+    }
+
+    y += memberHeight + 8;
+
+    // ==========================================
+    // PAYMENT DETAILS
+    // ==========================================
+
+    setText(8, COLORS.darkGreen, "bold");
+
+    doc.text("PAYMENT DETAILS", M, y);
+
+    y += 4;
+
+    divider(y);
+
+    y += 6;
+
+    // Payment details row with text wrapping.
+    function detailRow(label, value) {
+      const labelWidth = inner * 0.44;
+      const gap = 4;
+      const valueWidth = inner - labelWidth - gap;
+      const lineHeight = 4.5;
+
+      setText(9, COLORS.muted);
+
+      const labelLines = getLines(
+        label,
+        labelWidth
+      );
+
+      drawLines(
+        labelLines,
+        M,
+        y,
+        lineHeight
+      );
+
+      setText(10, COLORS.primary, "bold");
+
+      const valueLines = getLines(
+        value || "-",
+        valueWidth
+      );
+
+      drawLines(
+        valueLines,
+        W - M,
+        y,
+        lineHeight,
+        "right"
+      );
+
+      y +=
+        Math.max(
+          labelLines.length,
+          valueLines.length
+        ) *
+          lineHeight +
+        4;
+    }
+
+    // Membership plan
+    setText(9, COLORS.muted);
+
+    doc.text("Membership Plan", M, y);
+
+    y += 5;
+
+    setText(10, COLORS.primary, "bold");
+
+    const planLines = getLines(planName || "-");
+
+    y = drawLines(
+      planLines,
+      M,
+      y,
+      5
+    );
+
+    y += 3;
+
+    detailRow(
+      "Payment Method",
+      fmtMode(paymentMode)
+    );
+
+    detailRow(
+      "Payment Date",
+      fmtDate(paidOn)
+    );
+
+    detailRow(
+      "Membership Expiry",
+      fmtDate(nextDue)
+    );
+
+    // ==========================================
+    // PAYMENT REFERENCE
+    // ==========================================
+
+    if (paymentId) {
+      setText(7.5, COLORS.muted, "bold");
+
+      doc.text(
+        "PAYMENT REFERENCE",
+        M,
+        y
+      );
+
+      y += 5;
+
+      setText(8, COLORS.primary);
+
+      const referenceLines = getLines(
+        String(paymentId)
+      );
+
+      y = drawLines(
+        referenceLines,
+        M,
+        y,
+        4
+      );
+
+      y += 3;
+    }
+
+    // ==========================================
+    // TOTAL AMOUNT PAID
+    // ==========================================
+
+    const amountBoxHeight = 27;
+
+    doc.setFillColor(...COLORS.lightGreen);
+    doc.setDrawColor(...COLORS.green);
+    doc.setLineWidth(0.3);
+
+    doc.roundedRect(
+      M,
+      y,
+      inner,
+      amountBoxHeight,
+      3,
+      3,
+      "FD"
+    );
+
+    setText(8, COLORS.darkGreen, "bold");
+
+    doc.text(
+      "TOTAL AMOUNT PAID",
+      M + 5,
+      y + 7
+    );
+
+    setText(23, COLORS.primary, "bold");
+
+    // Prevent amount overflow.
+    while (
+      doc.getTextWidth(money) > inner - 10 &&
+      doc.getFontSize() > 6
+    ) {
+      doc.setFontSize(
+        doc.getFontSize() - 1
+      );
+    }
+
+    doc.text(
+      money,
+      M + 5,
+      y + 18
+    );
+
+    // Move below amount box.
+    y += amountBoxHeight + 9;
+
+    // ==========================================
+    // THANK YOU MESSAGE
+    // ==========================================
+
+    setText(11, COLORS.primary, "bold");
+
+    doc.text(
+      "Thank you for your payment!",
+      W / 2,
+      y,
+      {
+        align: "center",
+      }
+    );
+
+    y += 5;
+
+    setText(8, COLORS.muted);
+
+    doc.text(
+      "Stay consistent. Stay strong.",
+      W / 2,
+      y,
+      {
+        align: "center",
+      }
+    );
+
+    // Proper gap before footer.
+    y += 9;
+
+    // ==========================================
+    // FOOTER & BRANDING
+    // ==========================================
+
+    // Footer follows content instead of using H - 24.
+    divider(y);
+
+    y += 6;
+
+    setText(7, COLORS.muted);
+
+    const disclaimerLines = getLines(
+      "This is a computer-generated payment receipt."
+    );
+
+    y = drawLines(
+      disclaimerLines,
+      W / 2,
+      y,
+      3.5,
+      "center"
+    );
+
+    y += 3;
+
+    setText(7.5, COLORS.muted);
+
+    doc.text(
+      "Powered by",
+      W / 2,
+      y,
+      {
+        align: "center",
+      }
+    );
+
+    y += 6;
+
+    setText(13, COLORS.primary, "bold");
+
+    doc.text(
+      "GymHisab",
+      W / 2,
+      y,
+      {
+        align: "center",
+      }
+    );
+
+    y += 5;
+
+    setText(7, COLORS.darkGreen);
+
+    doc.text(
+      "Gym Management Software",
+      W / 2,
+      y,
+      {
+        align: "center",
+      }
+    );
+
+    y += 6;
+
+    // ==========================================
+    // BOTTOM BRANDING STRIP
+    // ==========================================
+
+    doc.setFillColor(...COLORS.green);
+    doc.rect(0, y, W, 2, "F");
+
+    y += 2;
+
+    // Return exact content height.
+    return y;
+  }
+
+  // ==========================================
+  // FIRST PASS: CALCULATE RECEIPT HEIGHT
+  // ==========================================
+
+  const measureDoc = new jsPDF({
+    orientation: "portrait",
+    unit: "mm",
+    format: [W, 1000],
+  });
+
+  const H = renderReceipt(measureDoc);
+
+  // ==========================================
+  // SECOND PASS: GENERATE FINAL PDF
+  // ==========================================
 
   const doc = new jsPDF({
     orientation: "portrait",
     unit: "mm",
     format: [W, H],
+    compress: true,
   });
 
-  function setText(size, color, weight = "normal") {
-    doc.setFont("helvetica", weight);
-    doc.setFontSize(size);
-    doc.setTextColor(...color);
-  }
-
-  function divider(y) {
-    doc.setDrawColor(...COLORS.border);
-    doc.setLineWidth(0.25);
-    doc.line(M, y, W - M, y);
-  }
-
-  // ==========================================
-  // HEADER
-  // ==========================================
-
-  doc.setFillColor(...COLORS.primary);
-  doc.rect(0, 0, W, headerHeight, "F");
-
-  doc.setFillColor(...COLORS.green);
-  doc.rect(0, 0, W, 2, "F");
-
-  let y = 11;
-
-  setText(17, COLORS.white, "bold");
-
-  gymLines.forEach((line) => {
-    doc.text(line, W / 2, y, {
-      align: "center",
-    });
-
-    y += 7;
+  doc.setProperties({
+    title: "Gym Membership Payment Receipt",
+    subject: "Membership Payment Receipt",
+    author: gymName || "GymHisab",
+    creator: "GymHisab",
   });
 
-  // Gym contact number
-  if (gymMobile) {
-    setText(9, COLORS.border);
-
-    doc.text(
-      `Mobile: ${fmtMobile(gymMobile)}`,
-      W / 2,
-      y,
-      { align: "center" },
-    );
-
-    y += 5;
-  }
-
-  // Government registration
-  if (registrationLines.length) {
-    setText(8, COLORS.border);
-
-    registrationLines.forEach((line) => {
-      doc.text(line, W / 2, y, {
-        align: "center",
-      });
-
-      y += 4;
-    });
-  }
+  renderReceipt(doc);
 
   // ==========================================
-  // RECEIPT TITLE
-  // ==========================================
-
-  y = headerHeight + 10;
-
-  setText(15, COLORS.primary, "bold");
-
-  doc.text("PAYMENT RECEIPT", W / 2, y, {
-    align: "center",
-  });
-
-  y += 5;
-
-  setText(8, COLORS.muted);
-
-  doc.text(
-    "Membership fee acknowledgement",
-    W / 2,
-    y,
-    { align: "center" },
-  );
-
-  y += 6;
-
-  divider(y);
-
-  y += 8;
-
-  // ==========================================
-  // MEMBER INFORMATION
-  // ==========================================
-
-  doc.setFillColor(...COLORS.light);
-  doc.roundedRect(M, y, inner, memberHeight, 3, 3, "F");
-
-  let memberY = y + 6;
-
-  setText(7.5, COLORS.muted, "bold");
-  doc.text("RECEIVED FROM", M + 4, memberY);
-
-  memberY += 6;
-
-  setText(13, COLORS.primary, "bold");
-
-  memberLines.forEach((line) => {
-    doc.text(line, M + 4, memberY);
-    memberY += 5.5;
-  });
-
-  if (memberMobile) {
-    setText(9, COLORS.muted);
-
-    doc.text(
-      fmtMobile(memberMobile),
-      M + 4,
-      memberY,
-    );
-  }
-
-  y += memberHeight + 8;
-
-  // ==========================================
-  // PAYMENT DETAILS
-  // ==========================================
-
-  setText(8, COLORS.darkGreen, "bold");
-
-  doc.text("PAYMENT DETAILS", M, y);
-
-  y += 4;
-
-  divider(y);
-
-  y += 7;
-
-  function detailRow(label, value) {
-    setText(9, COLORS.muted);
-
-    doc.text(label, M, y);
-
-    setText(10, COLORS.primary, "bold");
-
-    doc.text(String(value || "-"), W - M, y, {
-      align: "right",
-    });
-
-    y += 9;
-  }
-
-  // Membership plan supports multiple lines.
-  setText(9, COLORS.muted);
-  doc.text("Membership Plan", M, y);
-
-  y += 5;
-
-  setText(10, COLORS.primary, "bold");
-
-  planLines.forEach((line) => {
-    doc.text(line, M, y);
-    y += 5;
-  });
-
-  y += 3;
-
-  detailRow("Payment Method", fmtMode(paymentMode));
-
-  detailRow("Payment Date", fmtDate(paidOn));
-
-  detailRow("Membership Expiry", fmtDate(nextDue));
-
-  // ==========================================
-  // PAYMENT REFERENCE
-  // ==========================================
-
-  if (paymentId) {
-    setText(7.5, COLORS.muted, "bold");
-
-    doc.text("PAYMENT REFERENCE", M, y);
-
-    y += 5;
-
-    setText(8, COLORS.primary);
-
-    referenceLines.forEach((line) => {
-      doc.text(line, M, y);
-      y += 4;
-    });
-
-    y += 2;
-  }
-
-  // ==========================================
-  // AMOUNT PAID
-  // ==========================================
-
-  const amountBoxHeight = 27;
-
-  doc.setFillColor(...COLORS.lightGreen);
-  doc.setDrawColor(...COLORS.green);
-  doc.setLineWidth(0.3);
-
-  doc.roundedRect(
-    M,
-    y,
-    inner,
-    amountBoxHeight,
-    3,
-    3,
-    "FD",
-  );
-
-  setText(8, COLORS.darkGreen, "bold");
-
-  doc.text("TOTAL AMOUNT PAID", M + 5, y + 7);
-
-  setText(23, COLORS.primary, "bold");
-
-  // Prevent large amounts from overflowing.
-  while (
-    doc.getTextWidth(money) > inner - 10 &&
-    doc.getFontSize() > 10
-  ) {
-    doc.setFontSize(doc.getFontSize() - 1);
-  }
-
-  doc.text(money, M + 5, y + 18);
-
-  y += amountBoxHeight + 9;
-
-  // ==========================================
-  // THANK YOU MESSAGE
-  // ==========================================
-
-  setText(11, COLORS.primary, "bold");
-
-  doc.text("Thank you for your payment!", W / 2, y, {
-    align: "center",
-  });
-
-  y += 5;
-
-  setText(8, COLORS.muted);
-
-  doc.text("Stay consistent. Stay strong.", W / 2, y, {
-    align: "center",
-  });
-
-  // ==========================================
-  // FOOTER & BRANDING
-  // ==========================================
-
-  const footerY = H - 24;
-
-  divider(footerY);
-
-  setText(7, COLORS.muted);
-
-  doc.text(
-    "This is a computer-generated payment receipt.",
-    W / 2,
-    footerY + 5,
-    { align: "center" },
-  );
-
-  setText(7.5, COLORS.muted);
-
-  doc.text("Powered by", W / 2, footerY + 11, {
-    align: "center",
-  });
-
-  setText(13, COLORS.primary, "bold");
-
-  doc.text("GYM PILOT", W / 2, footerY + 16, {
-    align: "center",
-  });
-
-  setText(7, COLORS.darkGreen);
-
-  doc.text(
-    "Gym Management Software",
-    W / 2,
-    footerY + 20,
-    { align: "center" },
-  );
-
-  doc.setFillColor(...COLORS.green);
-  doc.rect(0, H - 2, W, 2, "F");
-
-    // ==========================================
-  // RETURN GENERATED PDF
+  // FILE NAME
   // ==========================================
 
   const stamp =
@@ -472,7 +685,10 @@ export async function generateReceipt({
   const fileName =
     `Receipt-${safeFileName(memberName)}-${stamp}.pdf`;
 
-  return { doc, fileName };
+  return {
+    doc,
+    fileName,
+  };
 }
 
 // ==========================================
@@ -480,7 +696,8 @@ export async function generateReceipt({
 // ==========================================
 
 export async function downloadReceipt(data) {
-  const { doc, fileName } = await generateReceipt(data);
+  const { doc, fileName } =
+    await generateReceipt(data);
 
   doc.save(fileName);
 }
@@ -490,14 +707,15 @@ export async function downloadReceipt(data) {
 // ==========================================
 
 export async function shareReceipt(data) {
-  const { doc, fileName } = await generateReceipt(data);
+  const { doc, fileName } =
+    await generateReceipt(data);
 
   const file = new File(
     [doc.output("blob")],
     fileName,
     {
       type: "application/pdf",
-    },
+    }
   );
 
   if (
@@ -512,4 +730,36 @@ export async function shareReceipt(data) {
   await navigator.share({
     files: [file],
   });
+}
+
+// ==========================================
+// PRINT RECEIPT
+// ==========================================
+
+export async function printReceipt(data) {
+  const printWindow = window.open("", "_blank");
+
+  if (!printWindow) {
+    throw new Error(
+      "Please allow popups to print the receipt."
+    );
+  }
+
+  try {
+    const { doc } = await generateReceipt(data);
+
+    doc.autoPrint();
+
+    const blob = doc.output("blob");
+    const url = URL.createObjectURL(blob);
+
+    printWindow.location.href = url;
+
+    setTimeout(() => {
+      URL.revokeObjectURL(url);
+    }, 300000);
+  } catch (error) {
+    printWindow.close();
+    throw error;
+  }
 }

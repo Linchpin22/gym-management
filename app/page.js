@@ -29,8 +29,6 @@ function friendlyError(message) {
   return message;
 }
 
-
-
 export default function LoginPage() {
   const router = useRouter();
 
@@ -93,8 +91,14 @@ export default function LoginPage() {
     }
 
     // With email confirmation on, an existing email comes back with no identities
-    if (data.user && data.user.identities && data.user.identities.length === 0) {
-      setError("An account with this email already exists. Please sign in instead.");
+    if (
+      data.user &&
+      data.user.identities &&
+      data.user.identities.length === 0
+    ) {
+      setError(
+        "An account with this email already exists. Please sign in instead.",
+      );
       return;
     }
 
@@ -111,22 +115,22 @@ export default function LoginPage() {
   }
 
   async function handleGoogleLogin() {
-  setLoading(true);
-  setError("");
-  setNotice("");
+    setLoading(true);
+    setError("");
+    setNotice("");
 
-  const { error } = await supabase.auth.signInWithOAuth({
-    provider: "google",
-    options: {
-      redirectTo: `${window.location.origin}/auth/callback?next=/setup-gym`,
-    },
-  });
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider: "google",
+      options: {
+        redirectTo: `${window.location.origin}/auth/callback?next=/setup-gym`,
+      },
+    });
 
-  if (error) {
-    setLoading(false);
-    setError(friendlyError(error.message));
+    if (error) {
+      setLoading(false);
+      setError(friendlyError(error.message));
+    }
   }
-}
 
   const inputBase =
     "w-full rounded-xl border border-[#DCE4DE] bg-white py-3.5 pl-12 text-sm text-[#17211A] outline-none transition placeholder:text-gray-400 focus:border-[#8BC34A] focus:ring-4 focus:ring-[#8BC34A]/10";
@@ -144,7 +148,7 @@ export default function LoginPage() {
           </div>
 
           <div>
-            <h1 className="text-xl font-bold tracking-wider">Gym Pilot</h1>
+            <h1 className="text-xl font-bold tracking-wider">GymHisab</h1>
             <p className="text-[10px] tracking-[2px] text-gray-400">
               GYM MANAGEMENT
             </p>
@@ -189,7 +193,7 @@ export default function LoginPage() {
         </div>
 
         <p className="relative z-10 text-xs text-gray-500">
-          © 2026 Gym Pilot. All rights reserved.
+          © 2026 GymHisab. All rights reserved.
         </p>
       </section>
 
@@ -204,7 +208,7 @@ export default function LoginPage() {
 
             <div>
               <h1 className="text-xl font-bold tracking-wide text-[#17211A]">
-                Gym Pilot
+                GymHisab
               </h1>
               <p className="text-[10px] tracking-[2px] text-[#829087]">
                 GYM MANAGEMENT
@@ -333,7 +337,9 @@ export default function LoginPage() {
                 <input
                   id="password"
                   type={showPassword ? "text" : "password"}
-                  placeholder={isSignup ? "At least 8 characters" : "Enter your password"}
+                  placeholder={
+                    isSignup ? "At least 8 characters" : "Enter your password"
+                  }
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   autoComplete={isSignup ? "new-password" : "current-password"}
@@ -395,32 +401,32 @@ export default function LoginPage() {
             </button>
           </form>
           {/* Google Login Divider */}
-<div className="relative my-6">
-  <div className="absolute inset-0 flex items-center">
-    <div className="w-full border-t border-[#E8EDE9]" />
-  </div>
+          <div className="relative my-6">
+            <div className="absolute inset-0 flex items-center">
+              <div className="w-full border-t border-[#E8EDE9]" />
+            </div>
 
-  <div className="relative flex justify-center">
-    <span className="bg-[#F5F7F6] px-3 text-xs text-[#829087]">
-      OR CONTINUE WITH
-    </span>
-  </div>
-</div>
+            <div className="relative flex justify-center">
+              <span className="bg-[#F5F7F6] px-3 text-xs text-[#829087]">
+                OR CONTINUE WITH
+              </span>
+            </div>
+          </div>
 
-{/* Google Login */}
-<button
-  type="button"
-  onClick={handleGoogleLogin}
-  disabled={loading}
-  className="flex w-full cursor-pointer items-center justify-center gap-3 rounded-xl border border-[#DCE4DE] bg-white py-3.5 text-sm font-semibold text-[#17211A] transition hover:border-[#B8C7BA] hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-60"
->
-  <span className="text-lg font-bold text-[#4285F4]">G</span>
-  Continue with Google
-</button>
+          {/* Google Login */}
+          <button
+            type="button"
+            onClick={handleGoogleLogin}
+            disabled={loading}
+            className="flex w-full cursor-pointer items-center justify-center gap-3 rounded-xl border border-[#DCE4DE] bg-white py-3.5 text-sm font-semibold text-[#17211A] transition hover:border-[#B8C7BA] hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            <span className="text-lg font-bold text-[#4285F4]">G</span>
+            Continue with Google
+          </button>
 
           <div className="mt-8 border-t border-[#E8EDE9] pt-6 text-center">
             <p className="text-xs text-[#829087]">
-              Secure gym owner access powered by Gym Pilot
+              Secure gym owner access powered by GymHisab
             </p>
           </div>
         </div>

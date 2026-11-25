@@ -1,4 +1,3 @@
-
 import { Poppins } from "next/font/google";
 import LayoutShell from "@/components/LayoutShell";
 import "./globals.css";
@@ -14,16 +13,16 @@ export const metadata = {
   metadataBase: new URL("https://your-domain.com"),
 
   title: {
-    default: "Gym Pilot - Gym Management Software",
-    template: "%s | Gym Pilot",
+    default: "GymHisab - Gym Management Software",
+    template: "%s | GymHisab",
   },
 
   description:
-    "Manage your gym smarter with Gym Pilot. Track members, memberships, payments, renewals and daily gym operations from one simple dashboard.",
+    "Manage your gym smarter with GymHisab. Track members, memberships, payments, renewals and daily gym operations from one simple dashboard.",
 
-  applicationName: "Gym Pilot",
+  applicationName: "GymHisab",
   keywords: [
-    "Gym Pilot",
+    "GymHisab",
     "gym management software",
     "gym management system",
     "gym membership management",
@@ -33,22 +32,22 @@ export const metadata = {
     "gym subscription management",
   ],
 
-  authors: [{ name: "Gym Pilot" }],
-  creator: "Gym Pilot",
+  authors: [{ name: "GymHisab" }],
+  creator: "GymHisab",
 
   openGraph: {
     type: "website",
-    title: "Gym Pilot - Gym Management Software",
+    title: "GymHisab - Gym Management Software",
     description:
-      "Simplify gym operations with Gym Pilot. Manage members, memberships, payments and renewals in one place.",
-    siteName: "Gym Pilot",
+      "Simplify gym operations with GymHisab. Manage members, memberships, payments and renewals in one place.",
+    siteName: "GymHisab",
   },
 
   twitter: {
     card: "summary_large_image",
-    title: "Gym Pilot - Gym Management Software",
+    title: "GymHisab - Gym Management Software",
     description:
-      "Manage your gym members, memberships and payments with Gym Pilot.",
+      "Manage your gym members, memberships and payments with GymHisab.",
   },
 
   robots: {
