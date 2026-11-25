@@ -12,7 +12,7 @@ import {
 
 import { supabase } from "@/lib/supabase";
 import { getStatus, daysLeft, today } from "@/utils/memberUtils";
-import { downloadReceipt } from "@/utils/receipt";
+import { downloadReceipt, shareReceipt } from "@/utils/receipt";
 import { FaWhatsapp } from "react-icons/fa";
 
 const SHOW_FIRST = 5;
@@ -91,30 +91,24 @@ export default function MemberHistoryModal({
   }, [member.id]);
 
   useEffect(() => {
-    const onKey = (e) => e.key === "Escape" && onClose();
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [onClose]);
+    function onKey(e) {
+      if (e.key !== "Escape" || editSaving) return;
 
-  useEffect(() => {
-  function onKey(e) {
-    if (e.key !== "Escape" || editSaving) return;
+      if (editingPayment) {
+        setEditingPayment(null);
+        setEditError("");
+        return;
+      }
 
-    if (editingPayment) {
-      setEditingPayment(null);
-      setEditError("");
-      return;
+      onClose();
     }
 
-    onClose();
-  }
+    window.addEventListener("keydown", onKey);
 
-  window.addEventListener("keydown", onKey);
-
-  return () => {
-    window.removeEventListener("keydown", onKey);
-  };
-}, [onClose, editingPayment, editSaving]);
+    return () => {
+      window.removeEventListener("keydown", onKey);
+    };
+  }, [onClose, editingPayment, editSaving]);
 
   function openEditPayment(payment) {
     setEditError("");
@@ -221,60 +215,67 @@ export default function MemberHistoryModal({
   const visible = showAll ? payments : payments.slice(0, SHOW_FIRST);
 
   // Receipt for the latest payment; next payment = the member's current expiry date
-async function handleReceipt() {
-  const latest = payments[0];
+  async function handleReceipt(action = "download") {
+    const latest = payments[0];
 
-  if (!latest || receiptBusy) return;
+    if (!latest || receiptBusy) return;
 
-  setReceiptBusy(true);
-  setReceiptError("");
+    setReceiptBusy(true);
+    setReceiptError("");
 
-  try {
-    if (!member.gym_id) {
-      throw new Error("Gym information is unavailable.");
-    }
+    try {
+      if (!member.gym_id) {
+        throw new Error("Gym information is unavailable.");
+      }
 
-    // Fetch latest gym profile details
-    const { data: gymData, error: gymError } = await supabase
-      .from("gyms")
-      .select(`
+      const { data: gymData, error: gymError } = await supabase
+        .from("gyms")
+        .select(
+          `
         name,
         mobile_number,
         registration_type,
         registration_number
-      `)
-      .eq("id", member.gym_id)
-      .single();
+      `,
+        )
+        .eq("id", member.gym_id)
+        .single();
 
-    if (gymError) {
-      throw new Error(gymError.message);
+      if (gymError) {
+        throw new Error(gymError.message);
+      }
+
+      const receiptData = {
+        gymName: gymData.name || gymName,
+        gymMobile: gymData.mobile_number,
+        registrationType: gymData.registration_type,
+        registrationNumber: gymData.registration_number,
+
+        memberName: member.name,
+        memberMobile: member.phone,
+
+        paymentId: latest.id,
+        paymentMode: latest.mode,
+        planName: planName(latest.plan_id),
+
+        amount: latest.amount,
+        paidOn: latest.paid_on,
+        nextDue: member.expiry_date,
+      };
+
+      if (action === "share") {
+        await shareReceipt(receiptData);
+      } else {
+        await downloadReceipt(receiptData);
+      }
+    } catch (err) {
+      if (err.name !== "AbortError") {
+        setReceiptError(err.message || "Could not create the receipt.");
+      }
+    } finally {
+      setReceiptBusy(false);
     }
-
-    await downloadReceipt({
-      gymName: gymData.name || gymName,
-      gymMobile: gymData.mobile_number,
-      registrationType: gymData.registration_type,
-      registrationNumber: gymData.registration_number,
-
-      memberName: member.name,
-      memberMobile: member.phone,
-
-      paymentId: latest.id,
-      paymentMode: latest.mode,
-      planName: planName(latest.plan_id),
-
-      amount: latest.amount,
-      paidOn: latest.paid_on,
-      nextDue: member.expiry_date,
-    });
-  } catch (err) {
-    setReceiptError(
-      err.message || "Could not create the receipt.",
-    );
-  } finally {
-    setReceiptBusy(false);
   }
-}
 
   const status = getStatus(member.expiry_date);
   const left = daysLeft(member.expiry_date);
@@ -357,234 +358,230 @@ async function handleReceipt() {
             <span>Plan: {member.plans?.name || planName(member.plan_id)}</span>
           </div>
 
-          {!loading && payments[0] && (
-            <>
-              <button
-                type="button"
-                onClick={handleReceipt}
-                disabled={receiptBusy}
-                className="mb-2 flex w-full cursor-pointer items-center justify-center gap-2 rounded-xl border border-[#DCE4DE] px-4 py-3 text-sm font-semibold text-[#17211A] transition hover:bg-[#F8FAF8] disabled:cursor-not-allowed disabled:opacity-50"
-              >
-                {receiptBusy ? (
-                  <LoaderCircle size={16} className="animate-spin" />
-                ) : (
+          {!loading && !editingPayment && payments[0] && (
+            <div className="mb-4">
+              <div className="grid grid-cols-2 gap-3">
+                <button
+                  type="button"
+                  onClick={() => handleReceipt("download")}
+                  disabled={receiptBusy}
+                  className="flex cursor-pointer items-center justify-center
+        gap-2 rounded-xl border border-[#DCE4DE] px-3 py-3
+        text-sm font-semibold text-[#17211A] transition
+        hover:bg-[#F8FAF8] disabled:cursor-not-allowed
+        disabled:opacity-50"
+                >
                   <Download size={16} />
-                )}
-                {receiptBusy ? "Preparing..." : "Download latest receipt"}
-              </button>
+                  Download Receipt
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => handleReceipt("share")}
+                  disabled={receiptBusy}
+                  className="flex cursor-pointer items-center justify-center
+        gap-2 rounded-xl border border-[#DCE8D4] bg-[#EEF4E8]
+        px-3 py-3 text-sm font-semibold text-[#52772D]
+        transition hover:bg-[#E4EED9]
+        disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  <FaWhatsapp size={16} />
+                  Send Receipt
+                </button>
+              </div>
+
+              {receiptBusy && (
+                <div className="mt-3 flex items-center justify-center gap-2 text-xs text-[#829087]">
+                  <LoaderCircle size={14} className="animate-spin" />
+                  Preparing receipt...
+                </div>
+              )}
+
               {receiptError && (
-                <p role="alert" className="mb-2 text-sm text-red-600">
+                <p role="alert" className="mt-2 text-sm text-red-600">
                   {receiptError}
                 </p>
               )}
-              <div className="mb-3" />
-            </>
+            </div>
           )}
 
           {/* Payments */}
-          <h3 className="mb-3 text-xs font-semibold uppercase tracking-wider text-[#829087]">
-            Payment history
-          </h3>
+          {!editingPayment && (
+            <h3 className="mb-3 text-xs font-semibold uppercase tracking-wider text-[#829087]">
+              Payment history
+            </h3>
+          )}
           {editingPayment && (
-  <div className="mb-5 rounded-2xl border border-[#DCE4DE] bg-[#F8FAF8] p-4 sm:p-5">
-    {/* Header */}
-    <div className="mb-4 flex items-start justify-between gap-3">
-      <div className="flex items-center gap-3">
-        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#EEF4E8] text-[#52772D]">
-          <Pencil size={18} />
-        </div>
+            <div className="mb-5 rounded-2xl border border-[#DCE4DE] bg-[#F8FAF8] p-4 sm:p-5">
+              {/* Header */}
+              <div className="mb-4 flex items-start justify-between gap-3">
+                <div className="flex items-center gap-3">
+                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#EEF4E8] text-[#52772D]">
+                    <Pencil size={18} />
+                  </div>
 
-        <div>
-          <h3 className="text-sm font-bold text-[#17211A]">
-            Edit payment
-          </h3>
+                  <div>
+                    <h3 className="text-sm font-bold text-[#17211A]">
+                      Edit payment
+                    </h3>
 
-          <p className="mt-1 text-xs text-[#829087]">
-            Correct an existing payment record.
-          </p>
-        </div>
-      </div>
+                    <p className="mt-1 text-xs text-[#829087]">
+                      Correct an existing payment record.
+                    </p>
+                  </div>
+                </div>
 
-      <button
-        type="button"
-        onClick={closeEditPayment}
-        disabled={editSaving}
-        className="cursor-pointer rounded-lg p-2 text-gray-500 hover:bg-gray-100 disabled:opacity-50"
-        aria-label="Close payment editor"
-      >
-        <X size={17} />
-      </button>
-    </div>
+                <button
+                  type="button"
+                  onClick={closeEditPayment}
+                  disabled={editSaving}
+                  className="cursor-pointer rounded-lg p-2 text-gray-500 hover:bg-gray-100 disabled:opacity-50"
+                  aria-label="Close payment editor"
+                >
+                  <X size={17} />
+                </button>
+              </div>
 
-    {/* Original payment */}
-    <div className="mb-4 flex items-center justify-between rounded-xl border border-[#E8EDE9] bg-white p-3">
-      <div>
-        <p className="text-xs text-[#829087]">
-          Original payment
-        </p>
+              {/* Original payment */}
+              <div className="mb-4 flex items-center justify-between rounded-xl border border-[#E8EDE9] bg-white p-3">
+                <div>
+                  <p className="text-xs text-[#829087]">Original payment</p>
 
-        <p className="mt-1 text-sm font-bold text-[#17211A]">
-          {inr(editingPayment.amount)}
-        </p>
-      </div>
+                  <p className="mt-1 text-sm font-bold text-[#17211A]">
+                    {inr(editingPayment.amount)}
+                  </p>
+                </div>
 
-      <div className="text-right">
-        <p className="text-xs text-[#829087]">
-          Payment date
-        </p>
+                <div className="text-right">
+                  <p className="text-xs text-[#829087]">Payment date</p>
 
-        <p className="mt-1 text-sm font-semibold text-[#17211A]">
-          {fmtDate(editingPayment.paid_on)}
-        </p>
-      </div>
-    </div>
+                  <p className="mt-1 text-sm font-semibold text-[#17211A]">
+                    {fmtDate(editingPayment.paid_on)}
+                  </p>
+                </div>
+              </div>
 
-    <form onSubmit={updatePayment} className="space-y-4">
-      {/* Amount and payment method */}
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-        <div className="space-y-2">
-          <label className="text-sm font-semibold text-gray-700">
-            Amount (₹)
-          </label>
+              <form
+                id="edit-payment-form"
+                onSubmit={updatePayment}
+                className="space-y-4"
+              >
+                {/* Amount and payment method */}
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  <div className="space-y-2">
+                    <label className="text-sm font-semibold text-gray-700">
+                      Amount (₹)
+                    </label>
 
-          <input
-            type="number"
-            min="0"
-            step="0.01"
-            value={editAmount}
-            onChange={(e) => setEditAmount(e.target.value)}
-            disabled={editSaving}
-            required
-            className="w-full rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm text-gray-900 outline-none transition focus:border-[#8BC34A] focus:ring-2 focus:ring-[#8BC34A]/15"
-          />
-        </div>
+                    <input
+                      type="number"
+                      min="0"
+                      step="0.01"
+                      value={editAmount}
+                      onChange={(e) => setEditAmount(e.target.value)}
+                      disabled={editSaving}
+                      required
+                      className="w-full rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm text-gray-900 outline-none transition focus:border-[#8BC34A] focus:ring-2 focus:ring-[#8BC34A]/15"
+                    />
+                  </div>
 
-        <div className="space-y-2">
-          <label className="text-sm font-semibold text-gray-700">
-            Payment method
-          </label>
+                  <div className="space-y-2">
+                    <label className="text-sm font-semibold text-gray-700">
+                      Payment method
+                    </label>
 
-          <select
-            value={editMode}
-            onChange={(e) => setEditMode(e.target.value)}
-            disabled={editSaving}
-            required
-            className="w-full rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm text-gray-900 outline-none transition focus:border-[#8BC34A] focus:ring-2 focus:ring-[#8BC34A]/15"
-          >
-            <option value="cash">Cash</option>
-            <option value="upi">UPI</option>
-            <option value="card">Card</option>
-            <option value="other">Other</option>
-          </select>
-        </div>
-      </div>
+                    <select
+                      value={editMode}
+                      onChange={(e) => setEditMode(e.target.value)}
+                      disabled={editSaving}
+                      required
+                      className="w-full rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm text-gray-900 outline-none transition focus:border-[#8BC34A] focus:ring-2 focus:ring-[#8BC34A]/15"
+                    >
+                      <option value="cash">Cash</option>
+                      <option value="upi">UPI</option>
+                      <option value="card">Card</option>
+                      <option value="other">Other</option>
+                    </select>
+                  </div>
+                </div>
 
-      {/* Payment date */}
-      <div className="space-y-2">
-        <label className="text-sm font-semibold text-gray-700">
-          Payment date
-        </label>
+                {/* Payment date */}
+                <div className="space-y-2">
+                  <label className="text-sm font-semibold text-gray-700">
+                    Payment date
+                  </label>
 
-        <input
-          type="date"
-          value={editPaidOn}
-          onChange={(e) => setEditPaidOn(e.target.value)}
-          min={member.join_date || undefined}
-          max={today()}
-          disabled={editSaving}
-          required
-          className="w-full rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm text-gray-900 outline-none transition focus:border-[#8BC34A] focus:ring-2 focus:ring-[#8BC34A]/15"
-        />
-      </div>
+                  <input
+                    type="date"
+                    value={editPaidOn}
+                    onChange={(e) => setEditPaidOn(e.target.value)}
+                    min={member.join_date || undefined}
+                    max={today()}
+                    disabled={editSaving}
+                    required
+                    className="w-full rounded-xl border border-gray-200 bg-white px-4 py-3 text-sm text-gray-900 outline-none transition focus:border-[#8BC34A] focus:ring-2 focus:ring-[#8BC34A]/15"
+                  />
+                </div>
 
-      {/* Revenue adjustment preview */}
-      {editAmount !== "" &&
-        Number.isFinite(Number(editAmount)) &&
-        Number(editAmount) >= 0 &&
-        Number(editAmount) !== Number(editingPayment.amount) && (
-          <div className="flex items-center justify-between rounded-xl border border-[#E4EED9] bg-[#F3F8ED] p-3">
-            <p className="text-xs font-medium text-gray-600">
-              Revenue adjustment
-            </p>
+                {/* Revenue adjustment preview */}
+                {editAmount !== "" &&
+                  Number.isFinite(Number(editAmount)) &&
+                  Number(editAmount) >= 0 &&
+                  Number(editAmount) !== Number(editingPayment.amount) && (
+                    <div className="flex items-center justify-between rounded-xl border border-[#E4EED9] bg-[#F3F8ED] p-3">
+                      <p className="text-xs font-medium text-gray-600">
+                        Revenue adjustment
+                      </p>
 
-            <p
-              className={`text-sm font-bold ${
-                Number(editAmount) >
-                Number(editingPayment.amount)
-                  ? "text-green-700"
-                  : "text-red-600"
-              }`}
-            >
-              {Number(editAmount) >
-              Number(editingPayment.amount)
-                ? "+"
-                : "-"}
-              {inr(
-                Math.abs(
-                  Number(editAmount) -
-                    Number(editingPayment.amount),
-                ),
-              )}
-            </p>
-          </div>
-        )}
+                      <p
+                        className={`text-sm font-bold ${
+                          Number(editAmount) > Number(editingPayment.amount)
+                            ? "text-green-700"
+                            : "text-red-600"
+                        }`}
+                      >
+                        {Number(editAmount) > Number(editingPayment.amount)
+                          ? "+"
+                          : "-"}
+                        {inr(
+                          Math.abs(
+                            Number(editAmount) - Number(editingPayment.amount),
+                          ),
+                        )}
+                      </p>
+                    </div>
+                  )}
 
-      {/* Warning */}
-      <div className="rounded-xl border border-orange-100 bg-orange-50 p-3">
-        <div className="flex items-start gap-2">
-          <AlertCircle
-            size={16}
-            className="mt-0.5 shrink-0 text-orange-600"
-          />
+                {/* Warning */}
+                <div className="rounded-xl border border-orange-100 bg-orange-50 p-3">
+                  <div className="flex items-start gap-2">
+                    <AlertCircle
+                      size={16}
+                      className="mt-0.5 shrink-0 text-orange-600"
+                    />
 
-          <p className="text-xs leading-relaxed text-orange-700">
-            Editing this payment will affect recorded revenue
-            and newly generated receipts. Membership expiry
-            and plan will remain unchanged.
-          </p>
-        </div>
-      </div>
+                    <p className="text-xs leading-relaxed text-orange-700">
+                      Editing this payment will affect recorded revenue and
+                      newly generated receipts. Membership expiry and plan will
+                      remain unchanged.
+                    </p>
+                  </div>
+                </div>
 
-      {/* Error */}
-      {editError && (
-        <div
-          role="alert"
-          className="rounded-xl border border-red-100 bg-red-50 p-3 text-sm text-red-600"
-        >
-          {editError}
-        </div>
-      )}
-
-      {/* Actions */}
-      <div className="flex gap-3">
-        <button
-          type="button"
-          onClick={closeEditPayment}
-          disabled={editSaving}
-          className="flex-1 cursor-pointer rounded-xl border border-gray-200 bg-white py-3 text-sm font-semibold text-gray-600 transition hover:bg-gray-50 disabled:opacity-50"
-        >
-          Cancel
-        </button>
-
-        <button
-          type="submit"
-          disabled={editSaving}
-          className="flex flex-1 cursor-pointer items-center justify-center gap-2 rounded-xl bg-[#17211A] py-3 text-sm font-semibold text-white transition hover:bg-[#304B32] disabled:opacity-50"
-        >
-          {editSaving ? (
-            <LoaderCircle size={16} className="animate-spin" />
-          ) : (
-            <Save size={16} />
+                {/* Error */}
+                {editError && (
+                  <div
+                    role="alert"
+                    className="rounded-xl border border-red-100 bg-red-50 p-3 text-sm text-red-600"
+                  >
+                    {editError}
+                  </div>
+                )}
+              </form>
+            </div>
           )}
 
-          {editSaving ? "Saving..." : "Save changes"}
-        </button>
-      </div>
-    </form>
-  </div>
-)}
-
-          {loading ? (
+          {editingPayment ? null : loading ? (
             <div className="flex justify-center py-8">
               <LoaderCircle size={26} className="animate-spin text-[#8BC34A]" />
             </div>
@@ -654,25 +651,54 @@ async function handleReceipt() {
 
         {/* Actions */}
         <div className="sticky bottom-0 flex gap-3 border-t border-[#E8EDE9] bg-[#F8FAF8] px-4 py-4 sm:px-6">
-          {waHref && (
-            <a
-              href={waHref}
-              target="_blank"
-              rel="noreferrer"
-              className="flex flex-1 items-center justify-center gap-2 rounded-xl border border-[#DCE4DE] bg-white px-4 py-3.5 text-sm font-semibold text-[#526157] transition hover:bg-gray-50"
-            >
-              <FaWhatsapp size={16} />
-              WhatsApp
-            </a>
+          {editingPayment ? (
+            <>
+              <button
+                type="button"
+                onClick={closeEditPayment}
+                disabled={editSaving}
+                className="flex flex-1 cursor-pointer items-center justify-center rounded-xl border border-[#DCE4DE] bg-white px-4 py-3.5 text-sm font-semibold text-[#526157] transition hover:bg-gray-50 disabled:opacity-50"
+              >
+                Cancel
+              </button>
+
+              <button
+                type="submit"
+                form="edit-payment-form"
+                disabled={editSaving}
+                className="flex flex-1 cursor-pointer items-center justify-center gap-2 rounded-xl bg-[#17211A] px-4 py-3.5 text-sm font-bold text-white transition hover:bg-[#304B32] disabled:opacity-50"
+              >
+                {editSaving ? (
+                  <LoaderCircle size={16} className="animate-spin" />
+                ) : (
+                  <Save size={16} />
+                )}
+                {editSaving ? "Saving..." : "Save changes"}
+              </button>
+            </>
+          ) : (
+            <>
+              {waHref && (
+                <a
+                  href={waHref}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="flex flex-1 items-center justify-center gap-2 rounded-xl border border-[#DCE4DE] bg-white px-4 py-3.5 text-sm font-semibold text-[#526157] transition hover:bg-gray-50"
+                >
+                  <FaWhatsapp size={16} />
+                  WhatsApp
+                </a>
+              )}
+              <button
+                type="button"
+                onClick={() => onRenew(member)}
+                className="flex flex-1 cursor-pointer items-center justify-center gap-2 rounded-xl bg-[#8BC34A] px-4 py-3.5 text-sm font-bold text-[#17211A] transition hover:bg-[#7FB53E]"
+              >
+                <RefreshCw size={16} />
+                Renew
+              </button>
+            </>
           )}
-          <button
-            type="button"
-            onClick={() => onRenew(member)}
-            className="flex flex-1 cursor-pointer items-center justify-center gap-2 rounded-xl bg-[#8BC34A] px-4 py-3.5 text-sm font-bold text-[#17211A] transition hover:bg-[#7FB53E]"
-          >
-            <RefreshCw size={16} />
-            Renew
-          </button>
         </div>
       </div>
     </div>

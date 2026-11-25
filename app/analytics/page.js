@@ -4,29 +4,26 @@ import { useEffect, useMemo, useState } from "react";
 import { supabase } from "@/lib/supabase";
 
 import AnalyticsHeader from "@/components/analytics/AnalyticsHeader";
-import RevenueStats from "@/components/analytics/RevenueStats";
-import RevenueChart from "@/components/analytics/RevenueChart";
-import PeriodComparison from "@/components/analytics/PeriodComparison";
-import PaymentBreakdown from "@/components/analytics/PaymentBreakdown";
 import ProfitSummary from "@/components/analytics/ProfitSummary";
+import RevenueChart from "@/components/analytics/RevenueChart";
+import PaymentBreakdown from "@/components/analytics/PaymentBreakdown";
 import ExpenseBreakdown from "@/components/analytics/ExpenseBreakdown";
 import ExpenseManager from "@/components/analytics/ExpenseManager";
+import PeriodComparison from "@/components/analytics/PeriodComparison";
 import {
-  IndianRupee,
-  ReceiptText,
   Calculator,
-  Trophy,
+  ReceiptText,
   RefreshCw,
+  TrendingDown,
+  Trophy,
 } from "lucide-react";
+
+const pad = (n) => String(n).padStart(2, "0");
 
 function getLocalDate() {
   const now = new Date();
 
-  const year = now.getFullYear();
-  const month = String(now.getMonth() + 1).padStart(2, "0");
-  const day = String(now.getDate()).padStart(2, "0");
-
-  return `${year}-${month}-${day}`;
+  return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
 }
 
 function getMonthKey(date) {
@@ -34,26 +31,47 @@ function getMonthKey(date) {
 }
 
 function formatCurrency(value) {
-  return `₹${Number(value || 0).toLocaleString("en-IN", {
+  const n = Number(value || 0);
+
+  return `${n < 0 ? "-" : ""}₹${Math.abs(n).toLocaleString("en-IN", {
     maximumFractionDigits: 0,
   })}`;
 }
 
-function getMonthName(date) {
-  return new Date(`${date}-01T00:00:00`).toLocaleDateString("en-IN", {
+function getMonthName(key) {
+  return new Date(`${key}-01T00:00:00`).toLocaleDateString("en-IN", {
     month: "long",
     year: "numeric",
   });
 }
 
-function getPaymentTotal(payments) {
-  return payments.reduce(
-    (total, payment) => total + Number(payment.amount || 0),
-    0,
-  );
+function sumAmounts(rows) {
+  return rows.reduce((total, row) => total + Number(row.amount || 0), 0);
 }
 
-function getChartData(payments, range, today, selectedMonth, selectedYear) {
+function totalsByKey(rows, length) {
+  const map = {};
+
+  rows.forEach((row) => {
+    const key = (row.paid_on || "").slice(0, length);
+
+    if (!key) return;
+
+    map[key] = (map[key] || 0) + Number(row.amount || 0);
+  });
+
+  return map;
+}
+
+// Income and expense per day (month view), month (year view) or year (lifetime).
+function buildChartData(
+  payments,
+  expenses,
+  range,
+  today,
+  selectedMonth,
+  selectedYear,
+) {
   if (!today) return [];
 
   const currentYear = Number(today.slice(0, 4));
@@ -63,69 +81,70 @@ function getChartData(payments, range, today, selectedMonth, selectedYear) {
   if (range === "month") {
     const year = Number(selectedYear);
     const month = Number(selectedMonth);
-
-    const monthKey = `${year}-${String(month).padStart(2, "0")}`;
+    const monthKey = `${year}-${pad(month)}`;
 
     const daysInMonth = new Date(year, month, 0).getDate();
+    const totalDays = monthKey === today.slice(0, 7) ? currentDay : daysInMonth;
 
-    const isCurrentMonth = monthKey === today.slice(0, 7);
-
-    const totalDays = isCurrentMonth ? currentDay : daysInMonth;
+    const income = totalsByKey(payments, 10);
+    const spent = totalsByKey(expenses, 10);
+    const monthShort = new Date(year, month - 1, 1).toLocaleDateString(
+      "en-IN",
+      { month: "short" },
+    );
 
     return Array.from({ length: totalDays }, (_, index) => {
       const day = index + 1;
-
-      const date = `${monthKey}-${String(day).padStart(2, "0")}`;
-
-      const value = payments
-        .filter((payment) => payment.paid_on === date)
-        .reduce((sum, payment) => sum + Number(payment.amount || 0), 0);
+      const date = `${monthKey}-${pad(day)}`;
 
       return {
         label: String(day),
-        value,
+        fullLabel: `${day} ${monthShort} ${year}`,
+        income: income[date] || 0,
+        expense: spent[date] || 0,
       };
     });
   }
 
   if (range === "year") {
     const year = Number(selectedYear);
-
     const totalMonths = year === currentYear ? currentMonth : 12;
 
-    return Array.from({ length: totalMonths }, (_, index) => {
-      const month = String(index + 1).padStart(2, "0");
-      const key = `${year}-${month}`;
+    const income = totalsByKey(payments, 7);
+    const spent = totalsByKey(expenses, 7);
 
-      const value = payments
-        .filter((payment) => getMonthKey(payment.paid_on) === key)
-        .reduce((sum, payment) => sum + Number(payment.amount || 0), 0);
+    return Array.from({ length: totalMonths }, (_, index) => {
+      const key = `${year}-${pad(index + 1)}`;
+      const date = new Date(`${key}-01T00:00:00`);
 
       return {
-        label: new Date(`${key}-01T00:00:00`).toLocaleDateString("en-IN", {
-          month: "short",
+        label: date.toLocaleDateString("en-IN", { month: "short" }),
+        fullLabel: date.toLocaleDateString("en-IN", {
+          month: "long",
+          year: "numeric",
         }),
-        value,
+        income: income[key] || 0,
+        expense: spent[key] || 0,
       };
     });
   }
 
-  const years = payments
-    .map((payment) => Number((payment.paid_on || "").slice(0, 4)))
+  const years = [...payments, ...expenses]
+    .map((row) => Number((row.paid_on || "").slice(0, 4)))
     .filter((year) => Number.isFinite(year) && year > 0);
 
   const firstYear = years.length ? Math.min(...years) : currentYear;
+  const income = totalsByKey(payments, 4);
+  const spent = totalsByKey(expenses, 4);
 
   return Array.from({ length: currentYear - firstYear + 1 }, (_, index) => {
-    const year = firstYear + index;
-
-    const value = payments
-      .filter((payment) => payment.paid_on?.startsWith(String(year)))
-      .reduce((sum, payment) => sum + Number(payment.amount || 0), 0);
+    const year = String(firstYear + index);
 
     return {
-      label: String(year),
-      value,
+      label: year,
+      fullLabel: year,
+      income: income[year] || 0,
+      expense: spent[year] || 0,
     };
   });
 }
@@ -165,6 +184,45 @@ function filterByRange(rows, range, selectedMonth, selectedYear) {
   return rows;
 }
 
+// Rows for the period before the selected one. When the selected period is
+// still running, only the same elapsed days are compared so the numbers are fair.
+// Returns null for lifetime, which has nothing to compare against.
+function getPreviousRows(rows, range, selectedMonth, selectedYear, today) {
+  if (!today) return null;
+
+  const year = Number(selectedYear);
+
+  if (range === "month") {
+    const month = Number(selectedMonth);
+    const prevYear = month === 1 ? year - 1 : year;
+    const prevMonth = month === 1 ? 12 : month - 1;
+    const prefix = `${prevYear}-${pad(prevMonth)}`;
+
+    const isCurrent = `${year}-${pad(month)}` === today.slice(0, 7);
+    const dayCap = today.slice(8, 10);
+
+    return rows.filter(
+      (r) =>
+        r.paid_on?.startsWith(prefix) &&
+        (!isCurrent || r.paid_on.slice(8, 10) <= dayCap),
+    );
+  }
+
+  if (range === "year") {
+    const prefix = String(year - 1);
+    const isCurrent = year === Number(today.slice(0, 4));
+    const cap = today.slice(5);
+
+    return rows.filter(
+      (r) =>
+        r.paid_on?.startsWith(prefix) &&
+        (!isCurrent || r.paid_on.slice(5) <= cap),
+    );
+  }
+
+  return null;
+}
+
 function InsightCard({ icon: Icon, label, value, description }) {
   return (
     <div className="bg-white border border-gray-100 rounded-2xl p-5 shadow-sm">
@@ -178,7 +236,7 @@ function InsightCard({ icon: Icon, label, value, description }) {
 
       <h3 className="text-xl font-bold text-[#17211A] mt-4">{value}</h3>
 
-      <p className="text-xs text-gray-400 mt-1">{description}</p>
+      <p className="text-xs text-gray-400 mt-1 truncate">{description}</p>
     </div>
   );
 }
@@ -188,8 +246,8 @@ function AnalyticsLoading() {
     <div className="space-y-6 animate-pulse">
       <div className="h-12 bg-gray-200 rounded-xl w-64" />
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
-        {Array.from({ length: 4 }).map((_, index) => (
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        {Array.from({ length: 3 }).map((_, index) => (
           <div key={index} className="h-36 bg-gray-100 rounded-2xl" />
         ))}
       </div>
@@ -206,6 +264,8 @@ function AnalyticsLoading() {
 
 export default function AnalyticsPage() {
   const [payments, setPayments] = useState([]);
+  const [expenses, setExpenses] = useState([]);
+  const [gymId, setGymId] = useState(null);
 
   const [range, setRange] = useState("month");
 
@@ -217,9 +277,6 @@ export default function AnalyticsPage() {
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState("");
 
-  const [expenses, setExpenses] = useState([]);
-  const [gymId, setGymId] = useState(null);
-
   // Initialize current date after mounting.
   useEffect(() => {
     const currentDate = getLocalDate();
@@ -229,127 +286,93 @@ export default function AnalyticsPage() {
     setSelectedYear(Number(currentDate.slice(0, 4)));
   }, []);
 
- async function loadAnalytics(isRefresh = false) {
-  try {
-    if (isRefresh) {
-      setRefreshing(true);
-    } else {
-      setLoading(true);
+  async function loadAnalytics(isRefresh = false) {
+    try {
+      if (isRefresh) {
+        setRefreshing(true);
+      } else {
+        setLoading(true);
+      }
+
+      setError("");
+
+      const {
+        data: { user },
+        error: authError,
+      } = await supabase.auth.getUser();
+
+      if (authError) throw authError;
+
+      if (!user) {
+        throw new Error("Please log in to view analytics.");
+      }
+
+      const { data: gymData, error: gymError } = await supabase
+        .from("gyms")
+        .select("id")
+        .eq("owner_id", user.id)
+        .limit(1)
+        .maybeSingle();
+
+      if (gymError) throw gymError;
+
+      if (!gymData?.id) {
+        throw new Error("Gym not found.");
+      }
+
+      setGymId(gymData.id);
+
+      const [allPayments, allExpenses] = await Promise.all([
+        fetchAllRows(
+          "payments",
+          "id, gym_id, amount, paid_on, mode, member_id, plan_id",
+          gymData.id,
+        ),
+        fetchAllRows(
+          "expenses",
+          "id, gym_id, amount, paid_on, category, paid_to, mode, note",
+          gymData.id,
+        ),
+      ]);
+
+      setPayments(allPayments);
+      setExpenses(allExpenses);
+    } catch (err) {
+      console.error("Analytics error:", err);
+      setError(err.message || "Unable to load analytics.");
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
     }
-
-    setError("");
-
-    // Verify authenticated user
-    const {
-      data: { user },
-      error: authError,
-    } = await supabase.auth.getUser();
-
-    if (authError) throw authError;
-
-    if (!user) {
-      throw new Error("Please log in to view analytics.");
-    }
-
-    // Fetch the gym belonging to the logged-in user
-    const { data: gymData, error: gymError } = await supabase
-      .from("gyms")
-      .select("id")
-      .eq("owner_id", user.id)
-      .limit(1)
-      .maybeSingle();
-
-    if (gymError) throw gymError;
-
-    if (!gymData?.id) {
-      throw new Error("Gym not found.");
-    }
-
-    // IMPORTANT: Set gym ID
-    setGymId(gymData.id);
-
-    // Fetch payments and expenses simultaneously
-    const [allPayments, allExpenses] = await Promise.all([
-      fetchAllRows(
-        "payments",
-        "id, gym_id, amount, paid_on, mode, member_id, plan_id",
-        gymData.id,
-      ),
-
-      fetchAllRows(
-        "expenses",
-        "id, gym_id, amount, paid_on, category, paid_to, mode, note",
-        gymData.id,
-      ),
-    ]);
-
-    setPayments(allPayments);
-    setExpenses(allExpenses);
-
-  } catch (err) {
-    console.error("Analytics error:", err);
-    setError(err.message || "Unable to load analytics.");
-  } finally {
-    setLoading(false);
-    setRefreshing(false);
   }
-}
 
   useEffect(() => {
     loadAnalytics();
   }, []);
 
-  // Available years from recorded payment history + current year.
-const availableYears = useMemo(() => {
-  if (!today) return [];
+  // Expense changes update local state, so there is no full re-fetch.
+  const handleExpenseAdded = (row) => setExpenses((prev) => [...prev, row]);
 
-  const currentYear = Number(today.slice(0, 4));
+  const handleExpenseUpdated = (row) =>
+    setExpenses((prev) => prev.map((e) => (e.id === row.id ? row : e)));
 
-  const years = [...payments, ...expenses]
-    .map((record) => Number((record.paid_on || "").slice(0, 4)))
-    .filter(
-      (year) =>
-        Number.isFinite(year) &&
-        year > 0 &&
-        year <= currentYear,
-    );
+  const handleExpenseDeleted = (id) =>
+    setExpenses((prev) => prev.filter((e) => e.id !== id));
 
-  return [...new Set([...years, currentYear])].sort(
-    (a, b) => b - a,
-  );
-}, [payments, expenses, today]);
+  // Years that have any payment or expense, plus the current year.
+  const availableYears = useMemo(() => {
+    if (!today) return [];
 
-  // Fixed overview cards.
-  const stats = useMemo(() => {
-    if (!today) {
-      return {
-        today: 0,
-        month: 0,
-        year: 0,
-        lifetime: getPaymentTotal(payments),
-      };
-    }
+    const currentYear = Number(today.slice(0, 4));
 
-    const currentMonth = today.slice(0, 7);
-    const currentYear = today.slice(0, 4);
+    const years = [...payments, ...expenses]
+      .map((record) => Number((record.paid_on || "").slice(0, 4)))
+      .filter(
+        (year) => Number.isFinite(year) && year > 0 && year <= currentYear,
+      );
 
-    return {
-      today: getPaymentTotal(
-        payments.filter((payment) => payment.paid_on === today),
-      ),
-
-      month: getPaymentTotal(
-        payments.filter((payment) => payment.paid_on?.startsWith(currentMonth)),
-      ),
-
-      year: getPaymentTotal(
-        payments.filter((payment) => payment.paid_on?.startsWith(currentYear)),
-      ),
-
-      lifetime: getPaymentTotal(payments),
-    };
-  }, [payments, today]);
-
+    return [...new Set([...years, currentYear])].sort((a, b) => b - a);
+  }, [payments, expenses, today]);
 
   const selectedPayments = useMemo(
     () => filterByRange(payments, range, selectedMonth, selectedYear),
@@ -368,46 +391,108 @@ const availableYears = useMemo(() => {
     return "Lifetime";
   }, [range, selectedMonth, selectedYear]);
 
-  // Chart changes according to selected period.
+  // Totals for the selected period and the one before it, computed once.
+  const summary = useMemo(() => {
+    const income = sumAmounts(selectedPayments);
+    const expense = sumAmounts(selectedExpenses);
+
+    const prevPayments = getPreviousRows(
+      payments,
+      range,
+      selectedMonth,
+      selectedYear,
+      today,
+    );
+    const prevExpenses = getPreviousRows(
+      expenses,
+      range,
+      selectedMonth,
+      selectedYear,
+      today,
+    );
+
+    const hasPrev = prevPayments !== null && prevExpenses !== null;
+
+    let comparisonLabel = null;
+
+    if (hasPrev && range === "month") {
+      comparisonLabel =
+        `${selectedYear}-${pad(Number(selectedMonth))}` === today.slice(0, 7)
+          ? "vs same days last month"
+          : "vs previous month";
+    } else if (hasPrev && range === "year") {
+      comparisonLabel =
+        Number(selectedYear) === Number(today.slice(0, 4))
+          ? "vs same period last year"
+          : "vs previous year";
+    }
+
+    return {
+      income,
+      expense,
+      net: income - expense,
+      prevIncome: hasPrev ? sumAmounts(prevPayments) : null,
+      prevExpense: hasPrev ? sumAmounts(prevExpenses) : null,
+      comparisonLabel,
+    };
+  }, [
+    selectedPayments,
+    selectedExpenses,
+    payments,
+    expenses,
+    range,
+    selectedMonth,
+    selectedYear,
+    today,
+  ]);
+
   const chartData = useMemo(
     () =>
-      getChartData(selectedPayments, range, today, selectedMonth, selectedYear),
-    [selectedPayments, range, today, selectedMonth, selectedYear],
+      buildChartData(
+        selectedPayments,
+        selectedExpenses,
+        range,
+        today,
+        selectedMonth,
+        selectedYear,
+      ),
+    [selectedPayments, selectedExpenses, range, today, selectedMonth, selectedYear],
   );
 
-  // Insights update according to selected period.
   const insights = useMemo(() => {
-    const total = getPaymentTotal(selectedPayments);
     const count = selectedPayments.length;
-    const average = count > 0 ? total / count : 0;
+    const average = count > 0 ? summary.income / count : 0;
 
-    // Best earning month across all recorded history.
-    const monthlyTotals = {};
+    const biggestExpense = selectedExpenses.reduce(
+      (max, e) =>
+        Number(e.amount || 0) > Number(max?.amount || 0) ? e : max,
+      null,
+    );
 
-    payments.forEach((payment) => {
-      const key = getMonthKey(payment.paid_on);
+    // Best profit month across all recorded history.
+    const monthlyNet = {};
 
+    payments.forEach((p) => {
+      const key = getMonthKey(p.paid_on);
       if (!key) return;
-
-      monthlyTotals[key] =
-        (monthlyTotals[key] || 0) + Number(payment.amount || 0);
+      monthlyNet[key] = (monthlyNet[key] || 0) + Number(p.amount || 0);
     });
 
-    const bestMonth = Object.entries(monthlyTotals).sort(
-      (a, b) => b[1] - a[1],
-    )[0];
+    expenses.forEach((e) => {
+      const key = getMonthKey(e.paid_on);
+      if (!key) return;
+      monthlyNet[key] = (monthlyNet[key] || 0) - Number(e.amount || 0);
+    });
+
+    const best = Object.entries(monthlyNet).sort((a, b) => b[1] - a[1])[0];
 
     return {
       count,
       average,
-      bestMonth: bestMonth
-        ? {
-            label: getMonthName(bestMonth[0]),
-            amount: bestMonth[1],
-          }
-        : null,
+      biggestExpense,
+      bestMonth: best ? { label: getMonthName(best[0]), amount: best[1] } : null,
     };
-  }, [payments, selectedPayments]);
+  }, [payments, expenses, selectedPayments, selectedExpenses, summary.income]);
 
   if (loading || !today) {
     return (
@@ -460,53 +545,59 @@ const availableYears = useMemo(() => {
           setSelectedYear={setSelectedYear}
           availableYears={availableYears}
         />
-        <RevenueStats stats={stats} />
 
         <ProfitSummary
-          income={getPaymentTotal(selectedPayments)}
-          expense={getPaymentTotal(selectedExpenses)}
-          label={`Incoming vs outgoing · ${periodLabel}`}
+          income={summary.income}
+          expense={summary.expense}
+          prevIncome={summary.prevIncome}
+          prevExpense={summary.prevExpense}
+          comparisonLabel={summary.comparisonLabel}
+          label={`Income vs expenses · ${periodLabel}`}
         />
 
         <RevenueChart data={chartData} range={range} />
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-          <PeriodComparison payments={payments} />
-          <PaymentBreakdown payments={selectedPayments} />
-        </div>
-
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-          <ExpenseBreakdown expenses={selectedExpenses} />
-          <ExpenseManager
-            gymId={gymId}
+          <PaymentBreakdown
+            payments={selectedPayments}
             expenses={selectedExpenses}
-            today={today}
-            onChanged={() => loadAnalytics(true)}
+            periodLabel={periodLabel}
+          />
+          <ExpenseBreakdown
+            expenses={selectedExpenses}
+            periodLabel={periodLabel}
           />
         </div>
 
-       
+        <ExpenseManager
+          gymId={gymId}
+          expenses={selectedExpenses}
+          today={today}
+          periodLabel={periodLabel}
+          onAdded={handleExpenseAdded}
+          onUpdated={handleExpenseUpdated}
+          onDeleted={handleExpenseDeleted}
+        />
 
+        <PeriodComparison
+          payments={payments}
+          expenses={expenses}
+          today={today}
+        />
 
         <section>
           <div className="mb-4">
-            <h2 className="text-lg font-bold text-[#17211A]">
-              Collection Insights
-            </h2>
+            <h2 className="text-lg font-bold text-[#17211A]">Quick Insights</h2>
 
             <p className="text-sm text-gray-500 mt-1">
-              Insights for the selected period.
+              Insights for {periodLabel.toLowerCase() === "lifetime"
+                ? "all recorded history"
+                : periodLabel}
+              .
             </p>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
-            <InsightCard
-              icon={ReceiptText}
-              label="Total Transactions"
-              value={insights.count.toLocaleString("en-IN")}
-              description="Payments in selected period"
-            />
-
             <InsightCard
               icon={Calculator}
               label="Average Payment"
@@ -515,15 +606,34 @@ const availableYears = useMemo(() => {
             />
 
             <InsightCard
-              icon={IndianRupee}
-              label="Selected Revenue"
-              value={formatCurrency(getPaymentTotal(selectedPayments))}
-              description="Total collection in selected period"
+              icon={ReceiptText}
+              label="Total Transactions"
+              value={insights.count.toLocaleString("en-IN")}
+              description="Payments in selected period"
+            />
+
+            <InsightCard
+              icon={TrendingDown}
+              label="Biggest Expense"
+              value={
+                insights.biggestExpense
+                  ? formatCurrency(insights.biggestExpense.amount)
+                  : "—"
+              }
+              description={
+                insights.biggestExpense
+                  ? `${insights.biggestExpense.category || "Expense"}${
+                      insights.biggestExpense.paid_to
+                        ? ` → ${insights.biggestExpense.paid_to}`
+                        : ""
+                    }`
+                  : "No expenses in selected period"
+              }
             />
 
             <InsightCard
               icon={Trophy}
-              label="Best Earning Month"
+              label="Best Profit Month"
               value={
                 insights.bestMonth
                   ? formatCurrency(insights.bestMonth.amount)
@@ -532,15 +642,15 @@ const availableYears = useMemo(() => {
               description={
                 insights.bestMonth
                   ? insights.bestMonth.label
-                  : "No payment history yet"
+                  : "No history yet"
               }
             />
           </div>
         </section>
 
         <p className="text-xs text-gray-400 text-center pb-4">
-          Revenue is calculated from recorded payments. It does not include
-          unpaid membership fees or operating expenses.
+          Net profit is recorded payments minus recorded expenses. Unpaid
+          membership fees are not included.
         </p>
       </div>
     </main>
