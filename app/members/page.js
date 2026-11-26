@@ -73,7 +73,7 @@ export default function MembersPage() {
 
     const { data, error: memberError } = await supabase
       .from("members")
-      .select("*, plans(name)")
+     .select("*, plans:plans!members_same_gym_plan_fkey(name)")
       .eq("gym_id", gymId)
       .order("expiry_date", { ascending: true });
 
