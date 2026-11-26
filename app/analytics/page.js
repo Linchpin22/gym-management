@@ -456,7 +456,14 @@ export default function AnalyticsPage() {
         selectedMonth,
         selectedYear,
       ),
-    [selectedPayments, selectedExpenses, range, today, selectedMonth, selectedYear],
+    [
+      selectedPayments,
+      selectedExpenses,
+      range,
+      today,
+      selectedMonth,
+      selectedYear,
+    ],
   );
 
   const insights = useMemo(() => {
@@ -464,8 +471,7 @@ export default function AnalyticsPage() {
     const average = count > 0 ? summary.income / count : 0;
 
     const biggestExpense = selectedExpenses.reduce(
-      (max, e) =>
-        Number(e.amount || 0) > Number(max?.amount || 0) ? e : max,
+      (max, e) => (Number(e.amount || 0) > Number(max?.amount || 0) ? e : max),
       null,
     );
 
@@ -490,7 +496,9 @@ export default function AnalyticsPage() {
       count,
       average,
       biggestExpense,
-      bestMonth: best ? { label: getMonthName(best[0]), amount: best[1] } : null,
+      bestMonth: best
+        ? { label: getMonthName(best[0]), amount: best[1] }
+        : null,
     };
   }, [payments, expenses, selectedPayments, selectedExpenses, summary.income]);
 
@@ -555,10 +563,6 @@ export default function AnalyticsPage() {
           label={`Income vs expenses · ${periodLabel}`}
         />
 
-       
-
-
-
         <ExpenseManager
           gymId={gymId}
           expenses={selectedExpenses}
@@ -569,7 +573,7 @@ export default function AnalyticsPage() {
           onDeleted={handleExpenseDeleted}
         />
 
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
           <PaymentBreakdown
             payments={selectedPayments}
             expenses={selectedExpenses}
@@ -580,7 +584,7 @@ export default function AnalyticsPage() {
             periodLabel={periodLabel}
           />
         </div>
-         <RevenueChart data={chartData} range={range} />
+        <RevenueChart data={chartData} range={range} />
 
         <PeriodComparison
           payments={payments}
@@ -593,7 +597,8 @@ export default function AnalyticsPage() {
             <h2 className="text-lg font-bold text-[#17211A]">Quick Insights</h2>
 
             <p className="text-sm text-gray-500 mt-1">
-              Insights for {periodLabel.toLowerCase() === "lifetime"
+              Insights for{" "}
+              {periodLabel.toLowerCase() === "lifetime"
                 ? "all recorded history"
                 : periodLabel}
               .
@@ -643,9 +648,7 @@ export default function AnalyticsPage() {
                   : "—"
               }
               description={
-                insights.bestMonth
-                  ? insights.bestMonth.label
-                  : "No history yet"
+                insights.bestMonth ? insights.bestMonth.label : "No history yet"
               }
             />
           </div>
