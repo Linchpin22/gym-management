@@ -28,6 +28,7 @@ import { supabase } from "@/lib/supabase";
 import { useSubscription } from "@/lib/subscription";
 import PlanBadge from "@/components/PlanBadge";
 import PlanCard from "@/components/PlanCard";
+import Image from "next/image";
 
 const navItems = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
@@ -315,15 +316,27 @@ export default function AppSidebar({ onLogout }) {
   }
 
   const Logo = () => (
-    <div className="flex items-center gap-3">
-      <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#8BC34A] text-[#17211A]">
-        <Dumbbell size={22} />
+    <Link
+      href="/dashboard"
+      aria-label="GymHisab Dashboard"
+      className="flex cursor-pointer items-center gap-3"
+    >
+      <div className="relative h-10 w-10 shrink-0 overflow-hidden rounded-xl">
+        <Image
+          src="/icon.png"
+          alt="GymHisab Logo"
+          fill
+          sizes="40px"
+          priority
+          className="object-cover brightness-0 invert"
+        />
       </div>
+
       <div>
         <h1 className="text-lg font-bold tracking-wide">GymHisab</h1>
         <p className="text-[11px] text-gray-400">GYM MANAGEMENT</p>
       </div>
-    </div>
+    </Link>
   );
 
   const Navigation = () => (
@@ -399,7 +412,7 @@ export default function AppSidebar({ onLogout }) {
   );
 
   const SubscriptionModal = () => (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 px-4 py-6 backdrop-blur-sm">
+    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 px-3 py-4 backdrop-blur-sm sm:px-4 sm:py-6">
       {/* Backdrop */}
       <button
         type="button"
@@ -412,19 +425,19 @@ export default function AppSidebar({ onLogout }) {
         role="dialog"
         aria-modal="true"
         aria-labelledby="subscription-title"
-        className="relative z-10 max-h-[90vh] w-full max-w-lg overflow-y-auto rounded-2xl border border-[#E8EDE9] bg-white shadow-2xl"
+        className="relative z-10 flex max-h-[90dvh] w-full max-w-lg flex-col overflow-hidden rounded-2xl border border-[#E8EDE9] bg-white shadow-2xl"
       >
-        {/* Header */}
-        <div className="flex items-center justify-between gap-3 border-b border-[#E8EDE9] px-6 py-5">
-          <div className="flex items-center gap-3">
+        {/* Fixed Header */}
+        <div className="flex shrink-0 items-center justify-between gap-3 border-b border-[#E8EDE9] bg-white px-4 py-4 sm:px-6 sm:py-5">
+          <div className="flex min-w-0 items-center gap-3">
             <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-[#EAF3E2] text-[#668D43]">
               <CreditCard size={22} />
             </div>
 
-            <div>
+            <div className="min-w-0">
               <h2
                 id="subscription-title"
-                className="text-lg font-bold text-[#17211A]"
+                className="text-base font-bold text-[#17211A] sm:text-lg"
               >
                 My Subscription
               </h2>
@@ -439,26 +452,26 @@ export default function AppSidebar({ onLogout }) {
             type="button"
             onClick={() => setPlanOpen(false)}
             aria-label="Close"
-            className="flex h-9 w-9 shrink-0 cursor-pointer items-center justify-center rounded-lg text-[#829087] transition hover:bg-gray-100 hover:text-[#17211A]"
+            className="flex h-10 w-10 shrink-0 cursor-pointer items-center justify-center rounded-lg text-[#829087] transition hover:bg-gray-100 hover:text-[#17211A]"
           >
             <X size={19} />
           </button>
         </div>
 
-        {/* Subscription content */}
-        <div className="p-5 sm:p-6">
+        {/* Scrollable Subscription Content */}
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-4 sm:p-6">
           {subGym ? (
             <PlanCard gym={subGym} plans={plans} />
           ) : (
             <div className="flex items-center gap-2 rounded-xl border border-red-100 bg-red-50 p-4 text-sm text-red-600">
-              <AlertCircle size={18} />
+              <AlertCircle size={18} className="shrink-0" />
               Subscription information is unavailable.
             </div>
           )}
         </div>
 
-        {/* Footer */}
-        <div className="border-t border-[#E8EDE9] bg-[#F8FAF8] px-6 py-4">
+        {/* Fixed Footer */}
+        <div className="shrink-0 border-t border-[#E8EDE9] bg-[#F8FAF8] px-4 py-3 sm:px-6 sm:py-4">
           <p className="text-center text-xs text-[#829087]">
             GymHisab · Subscription Management
           </p>
