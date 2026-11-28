@@ -268,37 +268,6 @@ export default function LoginPage() {
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-5">
-            {/* Gym name (sign up only) */}
-            {isSignup && (
-              <div>
-                <label
-                  htmlFor="gymName"
-                  className="mb-2 block text-sm font-semibold text-[#26352A]"
-                >
-                  Gym Name
-                </label>
-
-                <div className="relative">
-                  <Building2
-                    size={19}
-                    className="absolute left-4 top-1/2 -translate-y-1/2 text-[#829087]"
-                  />
-
-                  <input
-                    id="gymName"
-                    type="text"
-                    placeholder="e.g. Iron Fitness"
-                    value={gymName}
-                    onChange={(e) => setGymName(e.target.value)}
-                    autoComplete="organization"
-                    required
-                    maxLength={80}
-                    className={`${inputBase} pr-4`}
-                  />
-                </div>
-              </div>
-            )}
-
             {/* Email */}
             <div>
               <label
