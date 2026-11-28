@@ -15,6 +15,7 @@ import {
   Building2,
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
+import Image from "next/image";
 
 function friendlyError(message) {
   if (/invalid login credentials/i.test(message)) {
@@ -143,8 +144,15 @@ export default function LoginPage() {
         <div className="absolute -bottom-40 -left-32 h-[500px] w-[500px] rounded-full border border-white/5" />
 
         <div className="relative z-10 flex items-center gap-3">
-          <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-[#8BC34A] text-[#17211A]">
-            <Dumbbell size={26} />
+          <div className="relative h-10 w-10 shrink-0 overflow-hidden rounded-xl">
+            <Image
+              src="/icon.png"
+              alt="GymHisab Logo"
+              fill
+              sizes="40px"
+              priority
+              className="object-contain brightness-0 invert"
+            />
           </div>
 
           <div>
